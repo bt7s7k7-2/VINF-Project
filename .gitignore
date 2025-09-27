@@ -1,0 +1,33 @@
+# eclipse
+bin
+*.launch
+.settings
+.metadata
+.classpath
+.project
+
+# idea
+out
+*.ipr
+*.iws
+*.iml
+.idea
+
+# gradle
+build
+.gradle
+
+# other
+eclipse
+run
+runs
+run-data
+.vscode
+repo
+*.local
+src/generated/resources
+src/main/resources/assets/supervisory/textures
+/docs-build
+
+# Dataset
+/project
