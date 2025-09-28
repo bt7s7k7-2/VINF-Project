@@ -30,4 +30,4 @@ src/main/resources/assets/supervisory/textures
 /docs-build
 
 # Dataset
-/project
+/project*

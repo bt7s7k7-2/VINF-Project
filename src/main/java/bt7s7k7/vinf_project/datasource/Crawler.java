@@ -2,15 +2,20 @@ package bt7s7k7.vinf_project.datasource;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.LinkedHashSet;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hc.client5.http.fluent.Request;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.net.URIBuilder;
 
 import bt7s7k7.vinf_project.common.Logger;
 import bt7s7k7.vinf_project.common.Project;
@@ -24,17 +29,25 @@ public class Crawler {
 	 * To ensure the crawler does not visit sites other than the target site, all URLs will be
 	 * tested to start with this string.
 	 */
-	public final String mask;
+	public final URI mask;
+	public final String maskString;
 
 	public final Project project;
 	public final InputFileManager inputFileManager;
 
 	protected LinkedHashSet<URI> pagesToVisit = null;
+	protected CloseableHttpClient httpClient = HttpClientBuilder.create()
+			// Disable redirect handling, we want to handle it manually to prevent duplicate
+			// downloading when redirecting to an already downloaded page
+			.disableRedirectHandling()
+			.setUserAgent("")
+			.build();
 
-	public Crawler(Project project, URI entry, String mask) throws IOException {
+	public Crawler(Project project, URI entry, URI mask) throws IOException {
 		this.project = project;
 		this.entry = entry;
 		this.mask = mask;
+		this.maskString = mask.toString();
 		this.inputFileManager = this.project.getInputFileManager();
 	}
 
@@ -43,12 +56,12 @@ public class Crawler {
 	}
 
 	public boolean isUrlPartOfTargetSize(URI url) {
-		return url.toString().startsWith(this.mask);
+		return url.toString().startsWith(this.maskString);
 	}
 
 	private static final Pattern LINK_HREF = Pattern.compile("href=\"([^\"]+)\"");
 
-	public boolean visitNextPage() throws IOException {
+	public boolean visitNextPage() throws IOException, URISyntaxException {
 		if (this.pagesToVisit == null) {
 			// If our queue was not initialized yet, initialize it
 
@@ -75,61 +88,119 @@ public class Crawler {
 
 		// Get the first page in queue
 		var page = this.pagesToVisit.getFirst();
-		Logger.info("Downloading page: " + page.toString());
+		var pageName = this.getPageName(page);
+		Logger.info("Downloading page: " + pageName + " (" + page.toString() + ")");
 
-		var pageName = getPageName(page);
+		do {
+			// Check if the page has already been downloaded. This should not happen, since we wouldn't
+			// add a page to a queue if it already existed, but just in case.
+			if (this.inputFileManager.hasFileWithName(pageName)) {
+				Logger.warn("Page " + pageName + " (" + page.toString() + ") is already downloaded, skipping");
+				break;
+			}
 
-		// Check if the page has already been downloaded. This should not happen, since we wouldn't
-		// add a page to a queue if it already existed, but just in case.
-		if (this.inputFileManager.hasFileWithName(pageName)) {
-			Logger.warn("Page " + page.toString() + " is already downloaded, skipping");
-			// Remove the visited page from the queue
-			this.pagesToVisit.remove(page);
-			this.saveQueue();
-			return true;
-		}
+			// Test if this page is not valid, it may have been added to the queue in a previous version
+			// of this program with a different filter.
+			if (!this.isPageValid(page)) {
+				Logger.warn("Page " + pageName + " (" + page.toString() + ") is not valid, skipping");
+				break;
+			}
 
-		InputFile inputFile;
+			InputFile inputFile;
 
-		// Download the page and save it
-		try (var stream = page.toURL().openStream()) {
-			var content = stream.readAllBytes();
-			var contentText = new String(content, StandardCharsets.UTF_8);
-			inputFile = InputFile.fromContent(pageName, contentText);
-			this.inputFileManager.addFile(inputFile);
-		}
+			// Request the page
+			var response = (ClassicHttpResponse) Request.get(page)
+					.execute(this.httpClient)
+					.returnResponse();
 
-		Support.matchAll(inputFile.content, LINK_HREF, matcher -> {
-			var link = matcher.group(1);
-			// Ensure the URL is absolute
-			var nextPage = page.resolve(link);
+			// If the request was successful save it
+			if (response.getCode() == 200) {
+				var content = response.getEntity().getContent().readAllBytes();
+				var contentText = new String(content, StandardCharsets.UTF_8);
+				inputFile = InputFile.fromContent(pageName, contentText);
+				this.inputFileManager.addFile(inputFile);
 
-			this.queuePageIfValid(nextPage);
-		});
+				// Find all links and add them to the queue
+				Support.matchAll(inputFile.content, LINK_HREF, matcher -> {
+					var link = matcher.group(1);
+					// Ensure the URL is absolute
+					var nextPage = page.resolve(link);
+
+					try {
+						this.queuePageIfValid(nextPage);
+					} catch (URISyntaxException e) {
+						throw new RuntimeException(e);
+					}
+				});
+
+				break;
+			}
+
+			// Test if we were redirected, if so, add the new page to the queue
+			var redirect = response.getFirstHeader("location");
+			if (redirect != null) {
+				var redirectURL = page.resolve(redirect.getValue());
+				Logger.warn("Redirection to: " + redirectURL);
+				this.queuePageIfValid(redirectURL);
+
+				break;
+			}
+
+			// Failed to load the page, log error
+			Logger.error("Received status " + response.getCode() + " for page " + pageName + " (" + page.toString() + ")");
+		} while (false);
 
 		// Remove the visited page from the queue
 		this.pagesToVisit.remove(page);
 		this.saveQueue();
-		Logger.success("Done. " + this.pagesToVisit.size() + " pages in queue");
+		Logger.text(this.pagesToVisit.size() + " pages in queue");
 		return true;
 	}
 
-	public void queuePageIfValid(URI nextPage) {
+	public boolean isPageValid(URI nextPage) {
 		// Check if the page is not external
-		if (!this.isUrlPartOfTargetSize(nextPage)) return;
+		if (!this.isUrlPartOfTargetSize(nextPage)) return false;
 
-		// Check if we already have this page
-		var nextPageName = getPageName(nextPage);
-		if (this.inputFileManager.hasFileWithName(nextPageName)) {
-			return;
+		// Check if the link has a fragment
+		if (StringUtils.isNotEmpty(nextPage.getFragment())) return false;
+
+		var urlString = nextPage.toString();
+		// Ignore user contribution pages
+		if (urlString.contains("Special:Contributions")
+				|| urlString.contains("Special:WhatLinksHere")
+				|| urlString.contains("Special:RecentChangesLinked")
+				|| urlString.contains("Special:Version")) {
+			return false;
 		}
 
 		// Ignore pages not related to content
+		var nextPageName = this.getPageName(nextPage);
 		if (nextPageName.startsWith("User:")
 				|| nextPageName.startsWith("Help:")
 				|| nextPageName.startsWith("Template:")
 				|| nextPageName.startsWith("Talk:")
+				|| nextPageName.startsWith("File:")
+				|| nextPageName.startsWith("MediaWiki:")
 				|| nextPageName.startsWith("User_talk:")) {
+			return false;
+		}
+
+		return true;
+	}
+
+	public void queuePageIfValid(URI nextPage) throws URISyntaxException {
+		// If the link has a fragment, ignore it
+		if (StringUtils.isNotEmpty(nextPage.getFragment())) {
+			nextPage = new URIBuilder(nextPage)
+					.setFragment(null)
+					.build();
+		}
+
+		if (!this.isPageValid(nextPage)) return;
+
+		// Check if we already have this page
+		var nextPageName = this.getPageName(nextPage);
+		if (this.inputFileManager.hasFileWithName(nextPageName)) {
 			return;
 		}
 
@@ -145,7 +216,7 @@ public class Crawler {
 		Files.write(this.getQueueFile(), Support.toIterable(this.pagesToVisit.stream().map(URI::toString)::iterator));
 	}
 
-	private static String getPageName(URI page) {
-		return Paths.get(page.getPath()).getFileName().toString();
+	public String getPageName(URI page) {
+		return this.mask.relativize(page).toString();
 	}
 }

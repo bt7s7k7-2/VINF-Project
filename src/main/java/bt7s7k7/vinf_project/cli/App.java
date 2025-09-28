@@ -21,13 +21,11 @@ public class App {
 							// URL to the target site
 							new URI("https://gunkies.org/wiki/Main_Page"),
 							// Limit crawler to only visit pages on the target site
-							"https://gunkies.org/wiki/");
+							new URI("https://gunkies.org/wiki/"));
 
 					while (true) {
 						var success = crawler.visitNextPage();
-						if (!success) {}
-
-						break;
+						if (!success) break;
 					}
 
 					Logger.success("Finished downloading");
