@@ -6,6 +6,7 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -35,12 +36,15 @@ public class Crawler {
 	public final Project project;
 	public final InputFileManager inputFileManager;
 
+	// Utilizing a LinkedHashSet allows to efficiently look up, if a page is already queued, while
+	// simultaneously providing an ordered queue with its linked-list functionality.
 	protected LinkedHashSet<URI> pagesToVisit = null;
+
 	protected CloseableHttpClient httpClient = HttpClientBuilder.create()
 			// Disable redirect handling, we want to handle it manually to prevent duplicate
 			// downloading when redirecting to an already downloaded page
 			.disableRedirectHandling()
-			.setUserAgent("")
+			.setUserAgent("Web crawler for VINF course at FIIT STU, contact me at branislav.trstensky@gmail.com for complaints")
 			.build();
 
 	public Crawler(Project project, URI entry, URI mask) throws IOException {
@@ -59,9 +63,11 @@ public class Crawler {
 		return url.toString().startsWith(this.maskString);
 	}
 
+	// Because the target site is a MediaWiki site, all links are created automatically from
+	// MediaWiki syntax and so can assume that all links will have standard syntax.
 	private static final Pattern LINK_HREF = Pattern.compile("href=\"([^\"]+)\"");
 
-	public boolean visitNextPage() throws IOException, URISyntaxException {
+	public boolean visitNextPage() throws IOException, URISyntaxException, InterruptedException {
 		if (this.pagesToVisit == null) {
 			// If our queue was not initialized yet, initialize it
 
@@ -82,6 +88,7 @@ public class Crawler {
 			}
 		}
 
+		// If there are not pages in the queue, exit
 		if (this.pagesToVisit.isEmpty()) {
 			return false;
 		}
@@ -154,6 +161,9 @@ public class Crawler {
 		this.pagesToVisit.remove(page);
 		this.saveQueue();
 		Logger.text(this.pagesToVisit.size() + " pages in queue");
+
+		// Politeness
+		Thread.sleep(Duration.ofSeconds(5));
 		return true;
 	}
 
@@ -189,13 +199,14 @@ public class Crawler {
 	}
 
 	public void queuePageIfValid(URI nextPage) throws URISyntaxException {
-		// If the link has a fragment, ignore it
+		// If the link has a fragment, remove the fragment
 		if (StringUtils.isNotEmpty(nextPage.getFragment())) {
 			nextPage = new URIBuilder(nextPage)
 					.setFragment(null)
 					.build();
 		}
 
+		// Check if the page is valid
 		if (!this.isPageValid(nextPage)) return;
 
 		// Check if we already have this page

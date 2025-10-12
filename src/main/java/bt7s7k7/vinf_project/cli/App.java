@@ -31,11 +31,11 @@ public class App {
 					Logger.success("Finished downloading");
 				}
 				default -> {
-					System.err.println("Invalid arguments");
+					Logger.error("Invalid arguments");
 					System.exit(1);
 				}
 			}
-		} catch (IOException | URISyntaxException e) {
+		} catch (IOException | URISyntaxException | InterruptedException e) {
 			throw new RuntimeException(e);
 		}
 	}

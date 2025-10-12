@@ -69,7 +69,7 @@ public class InputFile {
 	private final static Pattern ESCAPE_SEQUENCE = Pattern.compile("\\(([0-9a-f]+)\\)");
 
 	public static String filenameToName(String name) {
-		// Remote the file extension
+		// Remove the file extension
 		if (name.endsWith(".html")) {
 			name = name.substring(0, name.length() - 5);
 		}
