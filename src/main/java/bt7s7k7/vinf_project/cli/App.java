@@ -7,7 +7,7 @@ import java.nio.file.Paths;
 
 import bt7s7k7.vinf_project.common.Logger;
 import bt7s7k7.vinf_project.common.Project;
-import bt7s7k7.vinf_project.datasource.Crawler;
+import bt7s7k7.vinf_project.input.Crawler;
 
 public class App {
 	public static void main(String[] args) {

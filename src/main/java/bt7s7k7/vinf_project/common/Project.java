@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import bt7s7k7.vinf_project.datasource.InputFileManager;
+import bt7s7k7.vinf_project.input.InputFileManager;
 
 public class Project {
 	public final Path rootPath;

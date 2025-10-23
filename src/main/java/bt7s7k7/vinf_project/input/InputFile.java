@@ -1,11 +1,9 @@
-package bt7s7k7.vinf_project.datasource;
+package bt7s7k7.vinf_project.input;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.regex.Pattern;
-
-import bt7s7k7.vinf_project.common.Support;
 
 public class InputFile {
 
@@ -60,7 +58,7 @@ public class InputFile {
 
 	public static String nameToFilename(String name) {
 		// Replace all character that are not valid for filenames with escape sequences
-		return Support.replaceAll(name, INVALID_FILENAME_CHARACTERS,
+		return INVALID_FILENAME_CHARACTERS.matcher(name).replaceAll(
 				v -> "(" + Integer.toHexString(v.group(0).charAt(0)) + ")")
 				// Append file extension
 				+ ".html";
@@ -75,6 +73,6 @@ public class InputFile {
 		}
 
 		// Replace escape sequences with their characters
-		return Support.replaceAll(name, ESCAPE_SEQUENCE, v -> "" + (char) Integer.parseInt(v.group(1), 16));
+		return ESCAPE_SEQUENCE.matcher(name).replaceAll(v -> "" + (char) Integer.parseInt(v.group(1), 16));
 	}
 }

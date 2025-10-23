@@ -1,4 +1,4 @@
-package bt7s7k7.vinf_project.datasource;
+package bt7s7k7.vinf_project.input;
 
 import java.io.IOException;
 import java.net.URI;
@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.LinkedHashSet;
+import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -128,17 +129,13 @@ public class Crawler {
 				this.inputFileManager.addFile(inputFile);
 
 				// Find all links and add them to the queue
-				Support.matchAll(inputFile.content, LINK_HREF, matcher -> {
+				for (var matcher : (Iterable<MatchResult>) LINK_HREF.matcher(inputFile.content).results()::iterator) {
 					var link = matcher.group(1);
 					// Ensure the URL is absolute
 					var nextPage = page.resolve(link);
 
-					try {
-						this.queuePageIfValid(nextPage);
-					} catch (URISyntaxException e) {
-						throw new RuntimeException(e);
-					}
-				});
+					this.queuePageIfValid(nextPage);
+				}
 
 				break;
 			}
@@ -224,7 +221,7 @@ public class Crawler {
 
 	public void saveQueue() throws IOException {
 		// Convert all queued URLs to string and save them to a file
-		Files.write(this.getQueueFile(), Support.toIterable(this.pagesToVisit.stream().map(URI::toString)::iterator));
+		Files.write(this.getQueueFile(), (Iterable<String>) this.pagesToVisit.stream().map(URI::toString)::iterator);
 	}
 
 	public String getPageName(URI page) {

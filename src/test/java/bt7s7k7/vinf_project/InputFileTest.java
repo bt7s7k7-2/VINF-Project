@@ -9,7 +9,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import bt7s7k7.vinf_project.datasource.InputFile;
+import bt7s7k7.vinf_project.input.InputFile;
 
 public class InputFileTest {
 	@Test

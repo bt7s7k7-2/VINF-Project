@@ -1,4 +1,4 @@
-package bt7s7k7.vinf_project.datasource;
+package bt7s7k7.vinf_project.input;
 
 import java.io.IOException;
 import java.nio.file.Files;
