@@ -13,6 +13,16 @@ public class InputFileManager {
 		this.path = path;
 	}
 
+	public Iterable<InputFile> getFiles() {
+		return this.cachedFiles::iterator;
+	}
+
+	public String getContent(InputFile file) throws IOException {
+		if (file.content != null) return file.content;
+		file.load(this.path);
+		return file.content;
+	}
+
 	public void refreshCache() throws IOException {
 		this.cachedFiles.clear();
 		try (var reader = Files.newDirectoryStream(this.path)) {

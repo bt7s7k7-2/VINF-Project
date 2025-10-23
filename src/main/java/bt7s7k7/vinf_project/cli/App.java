@@ -7,6 +7,7 @@ import java.nio.file.Paths;
 
 import bt7s7k7.vinf_project.common.Logger;
 import bt7s7k7.vinf_project.common.Project;
+import bt7s7k7.vinf_project.indexing.Indexer;
 import bt7s7k7.vinf_project.input.Crawler;
 
 public class App {
@@ -29,6 +30,10 @@ public class App {
 					}
 
 					Logger.success("Finished downloading");
+				}
+				case "index" -> {
+					var indexer = new Indexer(project);
+					indexer.index();
 				}
 				default -> {
 					Logger.error("Invalid arguments");

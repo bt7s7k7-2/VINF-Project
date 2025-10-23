@@ -30,7 +30,7 @@ public class InputFile {
 		return this.name.hashCode();
 	}
 
-	public void save(Path directory) throws IOException {
+	protected void save(Path directory) throws IOException {
 		// Prevent duplicate saving of an already saved file. This can happen whe save() is called
 		// on a file that was loaded from cache.
 		if (this.saved) return;
@@ -39,6 +39,12 @@ public class InputFile {
 		var path = directory.resolve(name);
 		this.saved = true;
 		Files.writeString(path, this.content);
+	}
+
+	protected void load(Path directory) throws IOException {
+		var name = nameToFilename(this.name);
+		var path = directory.resolve(name);
+		this.content = Files.readString(path);
 	}
 
 	public static InputFile fromCachedFile(Path cachedFile) {
