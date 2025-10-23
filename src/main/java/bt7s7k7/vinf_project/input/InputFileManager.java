@@ -17,6 +17,10 @@ public class InputFileManager {
 		return this.cachedFiles::iterator;
 	}
 
+	public int size() {
+		return this.cachedFiles.size();
+	}
+
 	public String getContent(InputFile file) throws IOException {
 		if (file.content != null) return file.content;
 		file.load(this.path);

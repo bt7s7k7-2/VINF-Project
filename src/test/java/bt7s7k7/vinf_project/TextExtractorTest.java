@@ -68,7 +68,12 @@ public class TextExtractorTest {
 	@Test
 	public void extractTokens() {
 		var input = "The BA11-P card cage from DEC was used in PDP-11/60 to hold the CPU, main memory and device controllers.";
-		var expected = "The,BA11-P,card,cage,from,DEC,was,used,in,PDP-11/60,to,hold,the,CPU,main,memory,and,device,controllers";
+		var expected = "the,ba11-p,ba11,p,card,cage,from,dec,was,used,in,pdp-11/60,pdp,11,60,to,hold,the,cpu,main,memory,and,device,controllers";
+
+		assertEquals(expected, TextExtractor.extractTokens(input).collect(Collectors.joining(",")));
+
+		input = "com/pub/pdp11/empty/rl02";
+		expected = "com/pub/pdp11/empty/rl02,com,pub,pdp11,empty,rl02";
 
 		assertEquals(expected, TextExtractor.extractTokens(input).collect(Collectors.joining(",")));
 	}

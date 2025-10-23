@@ -1,6 +1,5 @@
 package bt7s7k7.vinf_project.indexing;
 
-import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -49,12 +48,25 @@ public final class TextExtractor {
 	}
 
 	// Matches all words and numbers. Also included are special characters '/' and '-' if they are inside of a word, for system names like: "VAX-11/780"
-	private static final Pattern TOKEN_PATTERN = Pattern.compile("[a-zA-Z0-9](?:[a-zA-Z0-9-\\/])*");
+	private static final Pattern TOKEN_PATTERN = Pattern.compile("[a-zA-Z0-9](?:[a-zA-Z0-9-\\/]*[a-zA-Z0-9])?");
+	// Special character delimiting tokens
+	private static final Pattern TOKEN_DELIMITER_PATTERN = Pattern.compile("[-\\/]");
 
 	public static final Stream<String> extractTokens(String text) {
 		// Find all tokens
-		return TOKEN_PATTERN.matcher(text).results()
+		return TOKEN_PATTERN.matcher(text.toLowerCase()).results()
 				// Get token strings
-				.map(MatchResult::group);
+				.flatMap(match -> {
+					var token = match.group();
+
+					// If special character are found
+					if (TOKEN_DELIMITER_PATTERN.matcher(token).find()) {
+						// Also include parts of tokens delimited by special characters, so for "combined-word", also emit "combined" and "word"
+						var subTokens = TOKEN_DELIMITER_PATTERN.splitAsStream(token);
+						return Stream.concat(Stream.of(token), subTokens);
+					}
+
+					return Stream.of(token);
+				});
 	}
 }

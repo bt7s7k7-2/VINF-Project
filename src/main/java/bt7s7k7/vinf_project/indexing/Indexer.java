@@ -23,15 +23,23 @@ public class Indexer {
 	}
 
 	public void index() throws IOException {
-		var index = 0;
-		var lastSaved = 0;
+		var index = -1;
 
 		for (var file : this.inputFiles.getFiles()) {
+			index++;
+			// Skip category files
+			if (file.name.startsWith("Category:")
+					|| file.name.startsWith("Category_talk:")
+					|| file.name.startsWith("Special:")) {
+				continue;
+			}
+
 			// Skip already indexed files
 			if (this.documentDatabase.hasFile(file.name)) {
 				Logger.warn("File " + file.name + " already indexed");
 				continue;
 			}
+
 			var documentId = this.documentDatabase.addFile(file.name);
 
 			// Get tokens in document
@@ -50,18 +58,10 @@ public class Indexer {
 				term.addLocation(documentId, (int) frequency.longValue());
 			}
 
-			Logger.success("Indexed document " + file.name);
-			index++;
-			if (index - lastSaved > 10) {
-				this.documentDatabase.save();
-				this.index.save();
-				lastSaved = index;
-			}
+			Logger.success("Indexed document " + file.name + " (" + index + "/" + this.inputFiles.size() + ")");
 		}
 
-		if (index != lastSaved) {
-			this.documentDatabase.save();
-			this.index.save();
-		}
+		this.documentDatabase.save();
+		this.index.save();
 	}
 }
