@@ -35,12 +35,12 @@ public class Indexer {
 			}
 
 			// Skip already indexed files
-			if (this.documentDatabase.hasFile(file.name)) {
+			if (this.documentDatabase.hasDocument(file.name)) {
 				Logger.warn("File " + file.name + " already indexed");
 				continue;
 			}
 
-			var documentId = this.documentDatabase.addFile(file.name);
+			var documentId = this.documentDatabase.addDocument(file.name);
 
 			// Get tokens in document
 			var content = this.inputFiles.getContent(file);
@@ -54,7 +54,7 @@ public class Indexer {
 				var frequency = kv.getValue();
 
 				// Add this document to the index
-				var term = this.index.getTerm(termName);
+				var term = this.index.ensureTerm(termName);
 				term.addLocation(documentId, (int) frequency.longValue());
 			}
 

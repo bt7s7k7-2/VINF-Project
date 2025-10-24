@@ -17,11 +17,11 @@ public class DocumentDatabase {
 
 	protected HashBiMap<Integer, String> documentNameMapping = HashBiMap.create();
 
-	public boolean hasFile(String name) {
+	public boolean hasDocument(String name) {
 		return this.documentNameMapping.containsValue(name);
 	}
 
-	public int addFile(String name) {
+	public int addDocument(String name) {
 		// Get unique id for document
 		var id = this.documentNameMapping.size();
 		while (this.documentNameMapping.containsKey(id)) {
@@ -29,6 +29,10 @@ public class DocumentDatabase {
 		}
 		this.documentNameMapping.put(id, name);
 		return id;
+	}
+
+	public String findDocumentByIndex(int index) {
+		return this.documentNameMapping.get(index);
 	}
 
 	public void reload() throws IOException {

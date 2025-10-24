@@ -27,13 +27,6 @@ public class Crawler {
 	/** URL to start the crawling process. */
 	public final URI entry;
 
-	/**
-	 * To ensure the crawler does not visit sites other than the target site, all URLs will be
-	 * tested to start with this string.
-	 */
-	public final URI mask;
-	public final String maskString;
-
 	public final Project project;
 	public final InputFileManager inputFileManager;
 
@@ -48,20 +41,14 @@ public class Crawler {
 			.setUserAgent("Web crawler for VINF course at FIIT STU, contact me at branislav.trstensky@gmail.com for complaints")
 			.build();
 
-	public Crawler(Project project, URI entry, URI mask) throws IOException {
+	public Crawler(Project project, URI entry) throws IOException {
 		this.project = project;
 		this.entry = entry;
-		this.mask = mask;
-		this.maskString = mask.toString();
 		this.inputFileManager = this.project.getInputFileManager();
 	}
 
 	public Path getQueueFile() {
 		return this.project.rootPath.resolve("crawlerQueue.txt");
-	}
-
-	public boolean isUrlPartOfTargetSize(URI url) {
-		return url.toString().startsWith(this.maskString);
 	}
 
 	// Because the target site is a MediaWiki site, all links are created automatically from
@@ -166,7 +153,7 @@ public class Crawler {
 
 	public boolean isPageValid(URI nextPage) {
 		// Check if the page is not external
-		if (!this.isUrlPartOfTargetSize(nextPage)) return false;
+		if (!this.project.isUrlPartOfTargetSize(nextPage)) return false;
 
 		// Check if the link has a fragment
 		if (StringUtils.isNotEmpty(nextPage.getFragment())) return false;
@@ -225,6 +212,6 @@ public class Crawler {
 	}
 
 	public String getPageName(URI page) {
-		return this.mask.relativize(page).toString();
+		return this.project.getRelativeUri(page).toString();
 	}
 }

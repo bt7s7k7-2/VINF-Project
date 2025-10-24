@@ -1,6 +1,7 @@
 package bt7s7k7.vinf_project.common;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -11,8 +12,29 @@ import bt7s7k7.vinf_project.input.InputFileManager;
 public class Project {
 	public final Path rootPath;
 
-	protected Project(Path rootPath) {
+	/**
+	 * To ensure the crawler does not visit sites other than the target site, all URLs will be
+	 * tested to start with this string.
+	 */
+	protected final URI prefix;
+	protected final String prefixString;
+
+	protected Project(Path rootPath, URI prefix) {
 		this.rootPath = rootPath;
+		this.prefix = prefix;
+		this.prefixString = this.prefix.toString();
+	}
+
+	public URI getRelativeUri(URI absolute) {
+		return this.prefix.relativize(absolute);
+	}
+
+	public URI getAbsoluteURI(String relative) {
+		return this.prefix.resolve("./" + relative);
+	}
+
+	public boolean isUrlPartOfTargetSize(URI url) {
+		return url.toString().startsWith(this.prefixString);
 	}
 
 	public InputFileManager getInputFileManager() throws IOException {
@@ -45,8 +67,8 @@ public class Project {
 	}
 
 	/** Creates a project at a path. If the project folder does not exist it is created. */
-	public static Project fromPath(Path rootPath) throws IOException {
+	public static Project fromPath(Path rootPath, URI prefix) throws IOException {
 		Files.createDirectories(rootPath);
-		return new Project(rootPath);
+		return new Project(rootPath, prefix);
 	}
 }

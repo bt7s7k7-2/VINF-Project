@@ -31,6 +31,8 @@ dependencies {
 	implementation 'org.apache.httpcomponents.client5:httpclient5:5.5'
 	// https://mvnrepository.com/artifact/org.apache.httpcomponents.client5/httpclient5-fluent
 	implementation 'org.apache.httpcomponents.client5:httpclient5-fluent:5.5'
+
+	implementation 'org.jline:jline:3.29.0'
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

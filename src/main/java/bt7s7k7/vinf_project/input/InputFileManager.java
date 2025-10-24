@@ -3,18 +3,22 @@ package bt7s7k7.vinf_project.input;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashSet;
+import java.util.HashMap;
 
 public class InputFileManager {
 	public final Path path;
-	protected HashSet<InputFile> cachedFiles = new HashSet<>();
+	protected HashMap<String, InputFile> cachedFiles = new HashMap<>();
 
 	public InputFileManager(Path path) {
 		this.path = path;
 	}
 
 	public Iterable<InputFile> getFiles() {
-		return this.cachedFiles::iterator;
+		return this.cachedFiles.values()::iterator;
+	}
+
+	public InputFile findFile(String name) {
+		return this.cachedFiles.get(name);
 	}
 
 	public int size() {
@@ -35,22 +39,21 @@ public class InputFileManager {
 				if (!path.toString().endsWith(".html")) continue;
 
 				var inputFile = InputFile.fromCachedFile(path);
-				this.cachedFiles.add(inputFile);
+				this.cachedFiles.put(inputFile.name, inputFile);
 			}
 		}
 	}
 
 	public void addFile(InputFile file) throws IOException {
-		var added = this.cachedFiles.add(file);
+		var added = this.cachedFiles.put(file.name, file) == null;
 		if (!added) {
 			throw new RuntimeException("Duplicate addition of input file " + file.name);
 		}
 
-		this.cachedFiles.add(file);
 		file.save(this.path);
 	}
 
 	public boolean hasFileWithName(String name) {
-		return this.cachedFiles.contains(InputFile.fromName(name));
+		return this.cachedFiles.containsKey(name);
 	}
 }

@@ -18,7 +18,11 @@ public class Index {
 
 	protected TreeMap<String, TermInfo> terms = new TreeMap<>();
 
-	public TermInfo getTerm(String name) {
+	public TermInfo findTerm(String name) {
+		return this.terms.get(name);
+	}
+
+	public TermInfo ensureTerm(String name) {
 		var existing = this.terms.get(name);
 		if (existing != null) return existing;
 

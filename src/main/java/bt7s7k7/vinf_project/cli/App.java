@@ -5,24 +5,29 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Paths;
 
+import org.jline.reader.EndOfFileException;
+import org.jline.reader.LineReaderBuilder;
+import org.jline.reader.UserInterruptException;
+import org.jline.reader.impl.history.DefaultHistory;
+import org.jline.terminal.TerminalBuilder;
+
 import bt7s7k7.vinf_project.common.Logger;
 import bt7s7k7.vinf_project.common.Project;
 import bt7s7k7.vinf_project.indexing.Indexer;
 import bt7s7k7.vinf_project.input.Crawler;
+import bt7s7k7.vinf_project.search.SearchEngine;
 
 public class App {
 	public static void main(String[] args) {
 		try {
 			var rootPath = Paths.get("").toAbsolutePath().resolve("project");
-			var project = Project.fromPath(rootPath);
+			var project = Project.fromPath(rootPath, new URI("https://gunkies.org/wiki/"));
 
 			switch (args.length == 0 ? "" : args[0]) {
 				case "crawler" -> {
 					var crawler = new Crawler(project,
-							// URL to the target site
-							new URI("https://gunkies.org/wiki/Main_Page"),
-							// Limit crawler to only visit pages on the target site
-							new URI("https://gunkies.org/wiki/"));
+							// URL where to start the search
+							new URI("https://gunkies.org/wiki/Main_Page"));
 
 					while (true) {
 						var success = crawler.visitNextPage();
@@ -34,6 +39,45 @@ public class App {
 				case "index" -> {
 					var indexer = new Indexer(project);
 					indexer.index();
+				}
+				case "search" -> {
+					var searchEngine = new SearchEngine(project);
+
+					var terminal = TerminalBuilder.builder()
+							.system(true)
+							.build();
+
+					var history = new DefaultHistory();
+
+					var reader = LineReaderBuilder.builder()
+							.terminal(terminal)
+							.history(history)
+							.build();
+
+					while (true) {
+						try {
+							var line = reader.readLine("> ").trim();
+							if (line.isEmpty()) continue;
+
+							var documents = searchEngine.search(line);
+							if (documents.isEmpty()) {
+								Logger.error("No documents found");
+								continue;
+							}
+
+							for (var document : documents) {
+								Logger.info("Found: " + document + " \u001b[2m(" + project.getAbsoluteURI(document) + ")\u001b[0m");
+							}
+
+							Logger.success("Found " + documents.size() + " results");
+						} catch (UserInterruptException __) {
+							continue;
+						} catch (EndOfFileException __) {
+							break;
+						}
+					}
+
+					terminal.close();
 				}
 				default -> {
 					Logger.error("Invalid arguments");

@@ -11,6 +11,10 @@ public class TermInfo {
 	public int totalFrequency;
 	public final ArrayList<Location> locations = new ArrayList<>();
 
+	public int getDocumentCount() {
+		return this.locations.size();
+	}
+
 	public TermInfo(String value, int totalFrequency) {
 		this.value = value;
 		this.totalFrequency = totalFrequency;
