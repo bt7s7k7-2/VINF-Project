@@ -59,17 +59,18 @@ public class App {
 							var line = reader.readLine("> ").trim();
 							if (line.isEmpty()) continue;
 
-							var documents = searchEngine.search(line);
-							if (documents.isEmpty()) {
+							var suggestions = searchEngine.search(line);
+							if (suggestions.isEmpty()) {
 								Logger.error("No documents found");
 								continue;
 							}
 
-							for (var document : documents) {
-								Logger.info("Found: " + document + " \u001b[2m(" + project.getAbsoluteURI(document) + ")\u001b[0m");
+							for (var suggestion : suggestions) {
+								var document = searchEngine.documentDatabase.findDocumentByIndex(suggestion.document);
+								Logger.info("Found: " + document + " \u001b[2m(Score: " + suggestion.score + "; URL:" + project.getAbsoluteURI(document) + ")\u001b[0m");
 							}
 
-							Logger.success("Found " + documents.size() + " results");
+							Logger.success("Found " + suggestions.size() + " results");
 						} catch (UserInterruptException __) {
 							continue;
 						} catch (EndOfFileException __) {

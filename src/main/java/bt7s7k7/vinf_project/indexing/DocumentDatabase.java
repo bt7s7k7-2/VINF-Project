@@ -35,6 +35,10 @@ public class DocumentDatabase {
 		return this.documentNameMapping.get(index);
 	}
 
+	public int getDocumentCount() {
+		return this.documentNameMapping.size();
+	}
+
 	public void reload() throws IOException {
 		this.documentNameMapping.clear();
 

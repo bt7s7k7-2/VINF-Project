@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 
+import com.google.common.collect.Lists;
+
 public class TermInfo {
 	public static record Location(int document, int frequency) {}
 
@@ -31,5 +33,19 @@ public class TermInfo {
 		this.locations.add(index, location);
 
 		this.totalFrequency += frequency;
+	}
+
+	public int getDF() {
+		return this.locations.size();
+	}
+
+	public int getTF(int document) {
+		var index = Collections.binarySearch(Lists.transform(this.locations, Location::document), document);
+		if (index < 0) {
+			return 0;
+		}
+
+		var location = this.locations.get(index);
+		return location.frequency;
 	}
 }
