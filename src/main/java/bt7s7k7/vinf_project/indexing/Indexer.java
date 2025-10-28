@@ -42,8 +42,13 @@ public class Indexer {
 
 			var documentId = this.documentDatabase.addDocument(file.name);
 
-			// Get tokens in document
+			// Skip redirected pages, some redirection is done by JavaScript so we detect that here
 			var content = this.inputFiles.getContent(file);
+			if (content.contains("wgInternalRedirectTargetUrl")) {
+				continue;
+			}
+
+			// Get tokens in document
 			var text = TextExtractor.extractText(content);
 			var tokens = TextExtractor.extractTokens(text);
 
