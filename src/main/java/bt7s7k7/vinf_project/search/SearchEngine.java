@@ -2,7 +2,6 @@ package bt7s7k7.vinf_project.search;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -16,7 +15,6 @@ import bt7s7k7.vinf_project.common.Project;
 import bt7s7k7.vinf_project.common.Support;
 import bt7s7k7.vinf_project.indexing.DocumentDatabase;
 import bt7s7k7.vinf_project.indexing.Index;
-import bt7s7k7.vinf_project.indexing.TermInfo;
 import bt7s7k7.vinf_project.indexing.TextExtractor;
 
 public class SearchEngine {
@@ -83,9 +81,7 @@ public class SearchEngine {
 					.toArray();
 
 			// Perform euclidean normalization
-			var normalizationFactor = 1 / Arrays.stream(documentWeights)
-					.map(v -> v * v)
-					.sum();
+			var normalizationFactor = this.index.getEuclideanNormalizer(suggestion.document);
 
 			// Calculate score
 			double score = 0;
@@ -102,12 +98,12 @@ public class SearchEngine {
 		return suggestions;
 	}
 
-	public List<TermInfo> parseQuery(Stream<String> tokens) {
+	public List<Index.Term> parseQuery(Stream<String> tokens) {
 		var terms = tokens
 				// Remove duplicate tokens
 				.distinct()
 				// Get term from index for each token
-				.map(this.index::findTerm)
+				.map(this.index::getTerm)
 				.toList();
 
 		// Query is empty so it would match all documents
@@ -124,17 +120,15 @@ public class SearchEngine {
 		return terms;
 	}
 
-	public IntStream getMatchingDocuments(List<TermInfo> terms) {
-		List<TermInfo.Location> a = terms.get(0).locations;
+	public IntStream getMatchingDocuments(List<Index.Term> terms) {
+		var a = terms.get(0).getDocuments();
 		for (var i = 1; i < terms.size(); i++) {
-			var b = terms.get(i).locations;
+			var b = terms.get(i).getDocuments();
 
-			a = Support.getIntersection(a, b, Comparator.comparing(TermInfo.Location::document));
+			a = Support.getIntersection(a, b, Comparator.naturalOrder());
 		}
 
-		return a.stream()
-				// Get document ID
-				.mapToInt(TermInfo.Location::document);
+		return a.stream().mapToInt(Integer::valueOf);
 	}
 
 }

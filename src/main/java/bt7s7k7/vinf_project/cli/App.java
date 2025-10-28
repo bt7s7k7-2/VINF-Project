@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Paths;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReaderBuilder;
@@ -41,7 +43,13 @@ public class App {
 					indexer.index();
 				}
 				case "search" -> {
-					var searchEngine = new SearchEngine(project);
+					var searchEngineFuture = CompletableFuture.supplyAsync(() -> {
+						try {
+							return new SearchEngine(project);
+						} catch (IOException e) {
+							throw new RuntimeException(e);
+						}
+					});
 
 					var terminal = TerminalBuilder.builder()
 							.system(true)
@@ -59,6 +67,7 @@ public class App {
 							var line = reader.readLine("> ").trim();
 							if (line.isEmpty()) continue;
 
+							var searchEngine = searchEngineFuture.get();
 							var suggestions = searchEngine.search(line);
 							if (suggestions.isEmpty()) {
 								Logger.error("No documents found");
@@ -85,7 +94,7 @@ public class App {
 					System.exit(1);
 				}
 			}
-		} catch (IOException | URISyntaxException | InterruptedException e) {
+		} catch (IOException | URISyntaxException | InterruptedException | ExecutionException e) {
 			throw new RuntimeException(e);
 		}
 	}

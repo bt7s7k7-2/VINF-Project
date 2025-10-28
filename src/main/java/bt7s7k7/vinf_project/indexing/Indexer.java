@@ -54,8 +54,8 @@ public class Indexer {
 				var frequency = kv.getValue();
 
 				// Add this document to the index
-				var term = this.index.ensureTerm(termName);
-				term.addLocation(documentId, (int) frequency.longValue());
+				var term = this.index.getTerm(termName);
+				term.setFrequency(documentId, frequency.intValue());
 			}
 
 			Logger.success("Indexed document " + file.name + " (" + index + "/" + this.inputFiles.size() + ")");
