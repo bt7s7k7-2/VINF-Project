@@ -68,29 +68,29 @@ public class Index {
 			this.name = name;
 		}
 
+		public List<Location> getLocations() {
+			return Index.this.documentsByTerms.computeIfAbsent(this.name, __ -> new ArrayList<>());
+		}
+
 		public void setFrequency(int document, int frequency) {
-			Location.put(Index.this.documentsByTerms.get(this.name), document, frequency);
+			Location.put(this.getLocations(), document, frequency);
 			Index.this.termsInDocuments.put(document, this.name, frequency);
 		}
 
 		public int getDF() {
-			return Index.this.documentsByTerms.get(this.name).size();
+			return this.getLocations().size();
 		}
 
 		public int getTF(int document) {
-			return Location.get(Index.this.documentsByTerms.get(this.name), document);
+			return Location.get(this.getLocations(), document);
 		}
 
 		public double getIDF() {
 			return Math.log((double) Index.this.getDocumentCount() / this.getDF());
 		}
 
-		public Stream<Location> getLocations() {
-			return Index.this.documentsByTerms.get(this.name).stream();
-		}
-
 		public List<Integer> getDocuments() {
-			return this.getLocations().map(Location::document).toList();
+			return this.getLocations().stream().map(Location::document).toList();
 		}
 	}
 
@@ -138,7 +138,7 @@ public class Index {
 						// First two columns are the term and the total frequency
 						Stream.of(term.name),
 						// For each location, add column for document ID and frequency
-						term.getLocations().flatMap(location -> Stream.of(
+						term.getLocations().stream().flatMap(location -> Stream.of(
 								Integer.toString(location.document()),
 								Integer.toString(location.frequency()))))
 						.collect(Collectors.joining("\t")))::iterator);
