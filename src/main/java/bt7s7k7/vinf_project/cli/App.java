@@ -76,7 +76,7 @@ public class App {
 
 							for (var suggestion : suggestions) {
 								var document = searchEngine.documentDatabase.findDocumentByIndex(suggestion.document);
-								Logger.info("Found: " + document + " \u001b[2m(Score: " + suggestion.score + "; URL:" + project.getAbsoluteURI(document) + ")\u001b[0m");
+								Logger.info("Found: " + document + " \u001b[2m(Score: " + suggestion.score + "; URL: " + project.getAbsoluteURI(document) + ")\u001b[0m");
 							}
 
 							Logger.success("Found " + suggestions.size() + " results");
