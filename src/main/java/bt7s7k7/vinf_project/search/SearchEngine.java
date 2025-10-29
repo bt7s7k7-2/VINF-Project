@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.function.ToDoubleFunction;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -60,7 +61,8 @@ public class SearchEngine {
 				.mapToObj(Suggestion::new)
 				.collect(Collectors.toCollection(ArrayList::new));
 
-		var N = this.documentDatabase.getDocumentCount();
+		var N = this.index.getDocumentCount();
+
 		// Calculate weights for each term in the query
 		var queryWeights = terms.stream()
 				.mapToDouble(term -> {
@@ -70,23 +72,47 @@ public class SearchEngine {
 				})
 				.toArray();
 
+		// Select modification
+		var modifyTFLog = commands.contains("log");
+		var modifyTFByMaxTF = commands.contains("max-tf");
+
+		var useEuclideanNormalization = commands.contains("euc");
+
 		for (var suggestion : suggestions) {
+			ToDoubleFunction<Index.Term> getTF;
+
+			if (modifyTFLog) {
+				// Modify TF logarithmic
+				getTF = term -> {
+					var tf = term.getTF(suggestion.document);
+					var wf = tf > 0 ? 1 + Math.log(tf) : 0;
+					return wf;
+				};
+			} else if (modifyTFByMaxTF) {
+				// Normalize TF by max tf
+				var tfMax = this.index.getTFMax(suggestion.document);
+				getTF = term -> {
+					var tf = term.getTF(suggestion.document);
+					return 0.5 + 0.5 * tf / tfMax;
+				};
+			} else {
+				getTF = term -> term.getTF(suggestion.document);
+			}
+
 			// Calculate the weights for each term in the document that is relevant to the query
 			var documentWeights = terms.stream()
-					.mapToDouble(term -> {
-						var tf = term.getTF(suggestion.document);
-						var wf = tf > 0 ? 1 + Math.log(tf) : 0;
-						return wf;
-					})
+					.mapToDouble(getTF)
 					.toArray();
 
-			// Perform euclidean normalization
-			var normalizationFactor = this.index.getEuclideanNormalizer(suggestion.document);
+			// Perform normalization, if enabled
+			var normalizationFactor = useEuclideanNormalization ? this.index.getEuclideanNormalizer(suggestion.document) : 1;
 
 			// Calculate score
 			double score = 0;
 			for (int i = 0; i < documentWeights.length; i++) {
+				// Calculate normalized weight
 				var normalized = documentWeights[i] * normalizationFactor;
+				// Add the score
 				score += normalized * queryWeights[i];
 			}
 

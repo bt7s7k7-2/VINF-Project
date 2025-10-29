@@ -61,6 +61,15 @@ public class Index {
 				.sum());
 	}
 
+	public int getTFMax(int document) {
+		// Get all terms in the document
+		return this.termsInDocuments.row(document)
+				// Get frequencies
+				.values().stream().mapToInt(Integer::valueOf)
+				// Get maximum
+				.max().orElse(0);
+	}
+
 	public class Term {
 		public final String name;
 
