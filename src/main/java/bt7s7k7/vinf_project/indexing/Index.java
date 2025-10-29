@@ -50,11 +50,15 @@ public class Index {
 		return Index.this.termsInDocuments.rowKeySet().size();
 	}
 
+	public Map<String, Integer> getTermsInDocument(int document) {
+		return this.termsInDocuments.row(document);
+	}
+
 	public double getEuclideanNormalizer(int document) {
 		// Get the inverse of the square root of the sum of the squares of each the frequency of each term in the document
-		return 1 / Math.sqrt(this.termsInDocuments
+		return 1 / Math.sqrt(this.getTermsInDocument(document)
 				// Get term frequencies
-				.row(document).values().stream()
+				.values().stream()
 				// Square
 				.mapToDouble(v -> v.doubleValue() * v.doubleValue())
 				// Sum
