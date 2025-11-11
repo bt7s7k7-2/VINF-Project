@@ -18,6 +18,7 @@ import bt7s7k7.vinf_project.common.Project;
 import bt7s7k7.vinf_project.indexing.Indexer;
 import bt7s7k7.vinf_project.input.Crawler;
 import bt7s7k7.vinf_project.search.SearchEngine;
+import bt7s7k7.vinf_project.spark.SparkTest;
 
 public class App {
 	public static void main(String[] args) {
@@ -88,6 +89,9 @@ public class App {
 					}
 
 					terminal.close();
+				}
+				case "spark" -> {
+					SparkTest.run();
 				}
 				default -> {
 					Logger.error("Invalid arguments");

@@ -33,6 +33,11 @@ dependencies {
 	implementation 'org.apache.httpcomponents.client5:httpclient5-fluent:5.5'
 
 	implementation 'org.jline:jline:3.29.0'
+
+	// https://mvnrepository.com/artifact/org.apache.spark/spark-core
+	compileOnly 'org.apache.spark:spark-core_2.13:4.0.1'
+	// https://mvnrepository.com/artifact/org.apache.spark/spark-sql
+	compileOnly 'org.apache.spark:spark-sql_2.13:4.0.1'
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
