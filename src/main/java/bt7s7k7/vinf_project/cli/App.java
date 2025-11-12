@@ -91,7 +91,7 @@ public class App {
 					terminal.close();
 				}
 				case "spark" -> {
-					SparkTest.run();
+					new SparkTest(project.getDocumentDatabase()).run();
 				}
 				default -> {
 					Logger.error("Invalid arguments");

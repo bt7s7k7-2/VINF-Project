@@ -3,6 +3,8 @@ package bt7s7k7.vinf_project.indexing;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.stream.Stream;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -37,6 +39,10 @@ public class DocumentDatabase {
 
 	public int getDocumentCount() {
 		return this.documentNameMapping.size();
+	}
+
+	public Stream<Map.Entry<Integer, String>> stream() {
+		return this.documentNameMapping.entrySet().stream();
 	}
 
 	public void reload() throws IOException {
