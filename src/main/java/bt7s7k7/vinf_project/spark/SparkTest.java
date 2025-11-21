@@ -1,9 +1,9 @@
 package bt7s7k7.vinf_project.spark;
 
-import static org.apache.spark.sql.functions.callUDF;
+import static org.apache.spark.sql.functions.array_join;
 import static org.apache.spark.sql.functions.col;
-import static org.apache.spark.sql.functions.explode;
 import static org.apache.spark.sql.functions.lit;
+import static org.apache.spark.sql.functions.lower;
 import static org.apache.spark.sql.functions.regexp_extract_all;
 
 import java.io.IOException;
@@ -115,13 +115,18 @@ public final class SparkTest {
 				.select(
 						col("title"),
 						col("revision.text._VALUE").alias("value"))
-				.withColumn("normalized-title", callUDF("normalizeNameForLookup", col("title")))
-				.filter(col("normalized-title").isin(lookup.keySet().stream().toArray()))
-				.withColumn("categories", explode(regexp_extract_all(col("value"), lit("\\[\\[Category:(.*?)[\\]|]"), lit(1))))
-				.select(col("categories")).distinct();
+				.withColumn("categories", lower(array_join(regexp_extract_all(col("value"), lit("\\[\\[Category:(.*?)[\\]|]"), lit(1)), "|")))
+				.filter(
+						col("categories").rlike("computer")
+								.and(col("categories").rlike("people|theoretical computer science|companies|algorithm|programming constructs|architecture statements|book|video game(?! consoles)|jargon|comic|culture").unary_$bang()))
+				.select(col("title"), col("categories"))
+				.orderBy(col("title"));
 
 		try {
-			Files.write(Path.of(inputPath + ".categories.txt"), (Iterable<String>) relevant.collectAsList().stream().map(v -> v.getString(0))::iterator);
+			Files.write(Path.of(inputPath + ".relevant.tsv"), (Iterable<String>) relevant.collectAsList().stream()
+					.map(row -> (row.getString(0) + "\t" + row.getString(1)))::iterator);
+			Files.write(Path.of(inputPath + ".relevant.txt"), (Iterable<String>) relevant.collectAsList().stream()
+					.map(row -> row.getString(0))::iterator);
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
