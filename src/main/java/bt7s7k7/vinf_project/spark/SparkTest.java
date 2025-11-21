@@ -1,6 +1,7 @@
 package bt7s7k7.vinf_project.spark;
 
 import static org.apache.spark.sql.functions.array_join;
+import static org.apache.spark.sql.functions.callUDF;
 import static org.apache.spark.sql.functions.col;
 import static org.apache.spark.sql.functions.lit;
 import static org.apache.spark.sql.functions.lower;
@@ -11,12 +12,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
-import org.apache.commons.collections4.ListUtils;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
@@ -44,12 +44,6 @@ public final class SparkTest {
 
 		Logger.success("Started, " + this.spark.version());
 
-	}
-
-	private static final Pattern CHARACTERS_TO_REMOVE = Pattern.compile("[^a-z0-9]");
-
-	private static String normalizeNameForLookup(String name) {
-		return CHARACTERS_TO_REMOVE.matcher(name.toLowerCase()).replaceAll("");
 	}
 
 	public Dataset<Row> getInputData() {
@@ -90,18 +84,139 @@ public final class SparkTest {
 		Logger.success("Done. Took: " + Duration.between(start, end));
 	}
 
+	public static final class AttributeQueryBuilder {
+		private static abstract class Builder<T> {
+			private final T owner;
+
+			public Builder(T owner) {
+				this.owner = owner;
+			}
+
+			public T build() {
+				return this.owner;
+			}
+		}
+
+		private final List<Source<?>> sources = new ArrayList<>();
+
+		public Source<AttributeQueryBuilder> source(String segment) {
+			var source = new Source<>(this, Pattern.compile(segment));
+			this.sources.add(source);
+			return source;
+		}
+
+		public void match(String value, Consumer<String> append) {
+			for (var source : this.sources) {
+				source.match(value, append);
+			}
+		}
+
+		public static final class Source<T> extends Builder<T> {
+			private final Pattern segment;
+			private final List<Attribute<?>> attributes = new ArrayList<>();
+
+			public Source(T owner, Pattern segment) {
+				super(owner);
+				this.segment = segment;
+			}
+
+			public Attribute<Source<T>> attribute(String name, String predicate, String value) {
+				var attribute = new Attribute<>(this, name, Pattern.compile(predicate), Pattern.compile(value));
+				this.attributes.add(attribute);
+				return attribute;
+			}
+
+			public void match(String value, Consumer<String> append) {
+				var matcher = this.segment.matcher(value);
+
+				while (matcher.find()) {
+					var input = matcher.group();
+					for (var attribute : this.attributes) {
+						if (attribute.match(input, append)) break;
+					}
+				}
+			}
+		}
+
+		public static final class Attribute<T> extends Builder<T> {
+			private final String name;
+			private final Pattern predicate;
+			private final Pattern value;
+
+			private boolean multiple = false;
+
+			public Attribute(T owner, String name, Pattern predicate, Pattern value) {
+				super(owner);
+
+				this.name = name;
+				this.predicate = predicate;
+				this.value = value;
+			}
+
+			public Attribute<T> hasMultiple() {
+				this.multiple = true;
+				return this;
+			}
+
+			public boolean match(String input, Consumer<String> append) {
+				if (this.predicate.matcher(input).find()) {
+					var value = this.value.matcher(input);
+					if (this.multiple) {
+						var found = false;
+
+						while (value.find()) {
+							append.accept(this.name + ":" + value.group(1));
+							found = true;
+						}
+
+						return found;
+					}
+
+					if (value.find()) {
+						append.accept(this.name + ":" + value.group(1));
+						return true;
+					}
+				}
+
+				return false;
+			}
+		}
+
+	}
+
+	private static final AttributeQueryBuilder ATTRIBUTES = new AttributeQueryBuilder();
+
+	static {
+		// Match the target of a link, handle both [[entity]] and [[entity|label]]
+		var linkPattern = "\\[\\[([^|\\]]*?)(?:\\|.*?)?\\]\\]";
+
+		// Match fields in infoboxes
+		ATTRIBUTES
+				.source("(?<=^|\\n)\\| *[^\\n]*? *= *((?:\\{\\{(?:.*?\\n?)+\\}\\}|\\[\\[.*?\\]\\]|.*?(?=\\n|$|\\|))(?: *,?))+")
+				.attribute("release", "release\\w*(?: date)? *=", "(\\d{4})").build()
+				.attribute("discontinued", "discontinued *=", "(\\d{4})").build()
+				// Expect these references to be a link
+				.attribute("manufacturer", "manufacturer *=", linkPattern).hasMultiple().build()
+				.attribute("developer", "developer *=", linkPattern).hasMultiple().build()
+				.attribute("owner", "owner *=", linkPattern).hasMultiple().build()
+				.attribute("soldby", "soldby *=", linkPattern).hasMultiple().build()
+				.build();
+	}
+
 	public void run() {
-		Logger.info("Preparing lookup from document database...");
+		this.spark.udf().register("findAttributes", (UDF1<String, String>) text -> {
+			var resultBuilder = new StringBuilder();
 
-		// Prepare a list of existing documents with only alphanumeric characters for search
-		var lookup = this.documentDatabase.stream()
-				// Get document name
-				.map(Map.Entry::getValue)
-				// Transform document name and create a lookup table for the original names
-				.collect(Collectors.toMap(SparkTest::normalizeNameForLookup, List::of, ListUtils::union));
+			ATTRIBUTES.match(text, attribute -> {
+				if (resultBuilder.length() > 0) {
+					resultBuilder.append("\t");
+				}
 
-		// Register the normalization function
-		this.spark.udf().register("normalizeNameForLookup", (UDF1<String, String>) SparkTest::normalizeNameForLookup, DataTypes.StringType);
+				resultBuilder.append(attribute);
+			});
+
+			return resultBuilder.toString();
+		}, DataTypes.StringType);
 
 		var df = this.getInputData();
 
@@ -119,7 +234,8 @@ public final class SparkTest {
 				.filter(
 						col("categories").rlike("computer")
 								.and(col("categories").rlike("people|theoretical computer science|companies|algorithm|programming constructs|architecture statements|book|video game(?! consoles)|jargon|comic|culture").unary_$bang()))
-				.select(col("title"), col("categories"))
+				.withColumn("attributes", callUDF("findAttributes", col("value")))
+				.select(col("title"), col("attributes"))
 				.orderBy(col("title"));
 
 		try {
