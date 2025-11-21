@@ -35,9 +35,11 @@ dependencies {
 	implementation 'org.jline:jline:3.29.0'
 
 	// https://mvnrepository.com/artifact/org.apache.spark/spark-core
-	compileOnly 'org.apache.spark:spark-core_2.13:4.0.1'
+	implementation 'org.apache.spark:spark-core_2.13:4.0.1'
 	// https://mvnrepository.com/artifact/org.apache.spark/spark-sql
-	compileOnly 'org.apache.spark:spark-sql_2.13:4.0.1'
+	implementation 'org.apache.spark:spark-sql_2.13:4.0.1'
+	// https://mvnrepository.com/artifact/org.apache.commons/commons-compress
+	implementation 'org.apache.commons:commons-compress:1.28.0'
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
