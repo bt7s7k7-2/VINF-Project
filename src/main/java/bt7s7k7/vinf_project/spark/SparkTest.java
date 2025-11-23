@@ -125,7 +125,7 @@ public final class SparkTest {
 			}
 
 			public Attribute<Source<T>> attribute(String name, String predicate, String value) {
-				var attribute = new Attribute<>(this, name, predicate == null ? null : Pattern.compile(predicate), Pattern.compile(value));
+				var attribute = new Attribute<>(this, name, predicate == null ? null : Pattern.compile(predicate, Pattern.CASE_INSENSITIVE), Pattern.compile(value));
 				this.attributes.add(attribute);
 				return attribute;
 			}
@@ -233,13 +233,13 @@ public final class SparkTest {
 
 		// Match fields in infoboxes, these are definitely accurate
 		ATTRIBUTES
-				.inPattern("(?<=^|\\n)\\| *[^\\n]*? *= *((?:\\{\\{(?:.*?\\n?)+\\}\\}|\\[\\[.*?\\]\\]|.*?(?=\\n|$|\\|))(?: *,?))+")
+				.inPattern("(?:^|\\n)\\| *[^\\n=]*?=(?:[^|\\n{\\[]*(?:\\{\\{(?:.*?\\n?)+\\}\\}|\\[\\[.*?\\]\\])? *,?)+")
 				.attribute("release", "(?:release\\w*(?: date)?|produced-start) *=", "(\\d{4})").build()
 				.attribute("discontinued", "(?:discontinued|produced-end) *=", "(\\d{4})").build()
 				.attribute("wordSize", "data-width *=", "(\\d+)").hasMultiple().build()
-				.attribute("wordSize", "platform *=", "\\[\\[(\\d+)-bit").hasMultiple().build()
+				.attribute("wordSize", "(?:platform|bits) *=", "(\\d+)-bit").hasMultiple().build()
 				.attribute("manufacturer", "manuf(?:1|acturer) *=", entityPattern).hasMultiple().build()
-				.attribute("developer", "(?:developer|designfirm) *=", entityPattern).hasMultiple().build()
+				.attribute("developer", "(?:developer|designfirm|designer) *=", entityPattern).hasMultiple().build()
 				.attribute("owner", "owner *=", entityPattern).hasMultiple().build()
 				.attribute("soldby", "soldby *=", entityPattern).hasMultiple().build()
 				.build();
