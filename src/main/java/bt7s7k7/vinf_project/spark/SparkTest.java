@@ -281,8 +281,12 @@ public final class SparkTest {
 						col("revision.text._VALUE").alias("value"))
 				.withColumn("categories", lower(array_join(regexp_extract_all(col("value"), lit("\\[\\[Category:(.*?)[\\]|]"), lit(1)), "|")))
 				.filter(
-						col("categories").rlike("computer")
-								.and(col("categories").rlike("people|theoretical computer science|companies|algorithm|programming constructs|architecture statements|book|video game(?! consoles)|jargon|comic|culture|lists? ").unary_$bang()))
+						col("categories").rlike("computers|(?<!word )processor|game consoles")
+								.and(col("categories").rlike(
+										"fashion|people|theoretical computer science|companies|algorithm|programming constructs" +
+												"|architecture statements|book|video game(?! consoles)|jargon|comic|culture" +
+												"|lists? |operating system|system administration|characters in")
+										.unary_$bang()))
 				.withColumn("attributes", callUDF("findAttributes", col("value")))
 				.select(col("title"), col("attributes"))
 				.orderBy(col("title"));
