@@ -256,13 +256,21 @@ public final class SparkTest {
 		this.spark.udf().register("findAttributes", (UDF1<String, String>) text -> {
 			var resultBuilder = new StringBuilder();
 
-			ATTRIBUTES.match(text, attribute -> {
+			try {
+				ATTRIBUTES.match(text, attribute -> {
+					if (resultBuilder.length() > 0) {
+						resultBuilder.append("\t");
+					}
+
+					resultBuilder.append(attribute);
+				});
+			} catch (StackOverflowError error) {
 				if (resultBuilder.length() > 0) {
 					resultBuilder.append("\t");
 				}
 
-				resultBuilder.append(attribute);
-			});
+				resultBuilder.append("__stackOverflow");
+			}
 
 			return resultBuilder.toString();
 		}, DataTypes.StringType);
