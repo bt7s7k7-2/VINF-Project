@@ -99,8 +99,14 @@ public final class SparkTest {
 
 		private final List<Source<?>> sources = new ArrayList<>();
 
-		public Source<AttributeQueryBuilder> source(String segment) {
-			var source = new Source<>(this, Pattern.compile(segment));
+		public PatternSource<AttributeQueryBuilder> inPattern(String segment) {
+			var source = new PatternSource<>(this, Pattern.compile(segment));
+			this.sources.add(source);
+			return source;
+		}
+
+		public Source<AttributeQueryBuilder> anywhere() {
+			var source = new Source<>(this);
 			this.sources.add(source);
 			return source;
 		}
@@ -111,21 +117,35 @@ public final class SparkTest {
 			}
 		}
 
-		public static final class Source<T> extends Builder<T> {
-			private final Pattern segment;
-			private final List<Attribute<?>> attributes = new ArrayList<>();
+		public static class Source<T> extends Builder<T> {
+			protected final List<Attribute<?>> attributes = new ArrayList<>();
 
-			public Source(T owner, Pattern segment) {
+			public Source(T owner) {
 				super(owner);
-				this.segment = segment;
 			}
 
 			public Attribute<Source<T>> attribute(String name, String predicate, String value) {
-				var attribute = new Attribute<>(this, name, Pattern.compile(predicate), Pattern.compile(value));
+				var attribute = new Attribute<>(this, name, predicate == null ? null : Pattern.compile(predicate), Pattern.compile(value));
 				this.attributes.add(attribute);
 				return attribute;
 			}
 
+			public void match(String value, Consumer<String> append) {
+				for (var attribute : this.attributes) {
+					attribute.match(value, append);
+				}
+			}
+		}
+
+		public static final class PatternSource<T> extends Source<T> {
+			private final Pattern segment;
+
+			public PatternSource(T owner, Pattern segment) {
+				super(owner);
+				this.segment = segment;
+			}
+
+			@Override
 			public void match(String value, Consumer<String> append) {
 				var matcher = this.segment.matcher(value);
 
@@ -159,21 +179,42 @@ public final class SparkTest {
 			}
 
 			public boolean match(String input, Consumer<String> append) {
-				if (this.predicate.matcher(input).find()) {
-					var value = this.value.matcher(input);
-					if (this.multiple) {
-						var found = false;
+				// If we have a predicate, it must be in input
+				if (this.predicate != null && !this.predicate.matcher(input).find()) return false;
 
-						while (value.find()) {
-							append.accept(this.name + ":" + value.group(1));
-							found = true;
+				var value = this.value.matcher(input);
+				if (this.multiple) {
+					var found = false;
+
+					// Because we allow multiple value, go through all matches
+					while (value.find()) {
+						// Go through all groups in the value pattern and pick the first one with a value
+						String groupValue = null;
+						for (int i = 1; i <= value.groupCount(); i++) {
+							groupValue = value.group(i);
+							if (groupValue != null) break;
 						}
 
-						return found;
+						if (groupValue != null) {
+							append.accept(this.name + ":" + groupValue);
+							found = true;
+						}
 					}
 
-					if (value.find()) {
-						append.accept(this.name + ":" + value.group(1));
+					return found;
+				}
+
+				// Because we don't allow multiple value, go through only the first match
+				if (value.find()) {
+					// Go through all groups in the value pattern and pick the first one with a value
+					String groupValue = null;
+					for (int i = 1; i <= value.groupCount(); i++) {
+						groupValue = value.group(i);
+						if (groupValue != null) break;
+					}
+
+					if (groupValue != null) {
+						append.accept(this.name + ":" + groupValue);
 						return true;
 					}
 				}
@@ -187,19 +228,27 @@ public final class SparkTest {
 	private static final AttributeQueryBuilder ATTRIBUTES = new AttributeQueryBuilder();
 
 	static {
-		// Match the target of a link, handle both [[entity]] and [[entity|label]]
-		var linkPattern = "\\[\\[([^|\\]]*?)(?:\\|.*?)?\\]\\]";
+		// Match an named entity in a infobox, usually the target of a link, handle both [[entity]] and [[entity|label]], but could also be a plain string which is matched by "= <value>"
+		var entityPattern = "\\[\\[([^|\\]]*?)(?:\\|.*?)?\\]\\]|= ([\\w- ]+)";
 
-		// Match fields in infoboxes
+		// Match fields in infoboxes, these are definitely accurate
 		ATTRIBUTES
-				.source("(?<=^|\\n)\\| *[^\\n]*? *= *((?:\\{\\{(?:.*?\\n?)+\\}\\}|\\[\\[.*?\\]\\]|.*?(?=\\n|$|\\|))(?: *,?))+")
-				.attribute("release", "release\\w*(?: date)? *=", "(\\d{4})").build()
-				.attribute("discontinued", "discontinued *=", "(\\d{4})").build()
-				// Expect these references to be a link
-				.attribute("manufacturer", "manufacturer *=", linkPattern).hasMultiple().build()
-				.attribute("developer", "developer *=", linkPattern).hasMultiple().build()
-				.attribute("owner", "owner *=", linkPattern).hasMultiple().build()
-				.attribute("soldby", "soldby *=", linkPattern).hasMultiple().build()
+				.inPattern("(?<=^|\\n)\\| *[^\\n]*? *= *((?:\\{\\{(?:.*?\\n?)+\\}\\}|\\[\\[.*?\\]\\]|.*?(?=\\n|$|\\|))(?: *,?))+")
+				.attribute("release", "(?:release\\w*(?: date)?|produced-start) *=", "(\\d{4})").build()
+				.attribute("discontinued", "(?:discontinued|produced-end) *=", "(\\d{4})").build()
+				.attribute("wordSize", "data-width *=", "(\\d+)").hasMultiple().build()
+				.attribute("wordSize", "platform *=", "\\[\\[(\\d+)-bit").hasMultiple().build()
+				.attribute("manufacturer", "manuf(?:1|acturer) *=", entityPattern).hasMultiple().build()
+				.attribute("developer", "(?:developer|designfirm) *=", entityPattern).hasMultiple().build()
+				.attribute("owner", "owner *=", entityPattern).hasMultiple().build()
+				.attribute("soldby", "soldby *=", entityPattern).hasMultiple().build()
+				.build();
+
+		// Find attributes in plain text directly, these are potentially accurate
+		ATTRIBUTES
+				.anywhere()
+				.attribute("wordSize?", null, "\\[\\[(\\d+)-bit").build()
+				.attribute("wordSize?", null, "(\\w+)-bit (?:word|processor|microprocessor)").build()
 				.build();
 	}
 
@@ -233,15 +282,15 @@ public final class SparkTest {
 				.withColumn("categories", lower(array_join(regexp_extract_all(col("value"), lit("\\[\\[Category:(.*?)[\\]|]"), lit(1)), "|")))
 				.filter(
 						col("categories").rlike("computer")
-								.and(col("categories").rlike("people|theoretical computer science|companies|algorithm|programming constructs|architecture statements|book|video game(?! consoles)|jargon|comic|culture").unary_$bang()))
+								.and(col("categories").rlike("people|theoretical computer science|companies|algorithm|programming constructs|architecture statements|book|video game(?! consoles)|jargon|comic|culture|lists? ").unary_$bang()))
 				.withColumn("attributes", callUDF("findAttributes", col("value")))
 				.select(col("title"), col("attributes"))
 				.orderBy(col("title"));
 
 		try {
-			Files.write(Path.of(inputPath + ".relevant.tsv"), (Iterable<String>) relevant.collectAsList().stream()
+			Files.write(Path.of(this.inputPath + ".relevant.tsv"), (Iterable<String>) relevant.collectAsList().stream()
 					.map(row -> (row.getString(0) + "\t" + row.getString(1)))::iterator);
-			Files.write(Path.of(inputPath + ".relevant.txt"), (Iterable<String>) relevant.collectAsList().stream()
+			Files.write(Path.of(this.inputPath + ".relevant.txt"), (Iterable<String>) relevant.collectAsList().stream()
 					.map(row -> row.getString(0))::iterator);
 		} catch (IOException e) {
 			throw new RuntimeException(e);
