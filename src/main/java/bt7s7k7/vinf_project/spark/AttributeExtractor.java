@@ -100,7 +100,8 @@ public final class AttributeExtractor {
 		private final Pattern value;
 		private List<Attribute<?>> children = null;
 
-		private boolean multiple = false;
+		private boolean multipleMatches = false;
+		private boolean concatGroups = false;
 
 		public Attribute(T owner, String name, Pattern predicate, Pattern value) {
 			super(owner);
@@ -123,17 +124,37 @@ public final class AttributeExtractor {
 			return attribute;
 		}
 
-		public Attribute<T> hasMultiple() {
-			this.multiple = true;
+		public Attribute<T> enableMultipleMatches() {
+			this.multipleMatches = true;
+			return this;
+		}
+
+		public Attribute<T> enableConcatGroups() {
+			this.concatGroups = true;
 			return this;
 		}
 
 		public boolean processResult(String input, Matcher value, Consumer<String> append) {
-			// Go through all groups in the value pattern and pick the first one with a value
 			String groupValue = null;
-			for (int i = 1; i <= value.groupCount(); i++) {
-				groupValue = value.group(i);
-				if (groupValue != null) break;
+
+			if (this.concatGroups) {
+				// Go through all groups and concatenate all those that are not null
+				var builder = new StringBuilder();
+				for (int i = 1; i <= value.groupCount(); i++) {
+					var found = value.group(i);
+					if (found != null) {
+						if (!builder.isEmpty()) builder.append(" ");
+						builder.append(found);
+					}
+				}
+
+				if (!builder.isEmpty()) groupValue = builder.toString();
+			} else {
+				// Go through all groups in the value pattern and pick the first one with a value
+				for (int i = 1; i <= value.groupCount(); i++) {
+					groupValue = value.group(i);
+					if (groupValue != null) break;
+				}
 			}
 
 			if (groupValue != null) {
@@ -172,7 +193,7 @@ public final class AttributeExtractor {
 			}
 
 			var value = this.value.matcher(input);
-			if (this.multiple) {
+			if (this.multipleMatches) {
 				var found = false;
 
 				// Because we allow multiple value, go through all matches
@@ -204,17 +225,26 @@ public final class AttributeExtractor {
 		// Date that may have a day, month and must have a year. We only care about the year.
 		var genericDate = "(?:\\d{1,2} )?(?:[A-Za-z]+ )?(\\d{4})";
 
+		// The unit can be from Hz to GHz. This could exclude Hz, because this is likely to conflict
+		// with power input frequency, but that is unlikely to happen in infobox, so process that in
+		// post processing.
+		var clockSpeedUnit = "(?:\\[\\[)?(?:Hertz\\|)?([MGk]?Hz)";
+		var decimalNumber = "\\d+(?:\\.\\d+)?";
+		var clockSpeed = "(" + decimalNumber + ") *(?:&nbsp; *)?" + clockSpeedUnit;
+
 		// Match fields in infoboxes, these are definitely accurate
 		VALUE
 				.inPattern("(?:^|\\n)\\| *[^\\n=]*?=(?:[^|\\n{\\[]*(?:\\{\\{(?:.*?\\n?)+\\}\\}|\\[\\[.*?\\]\\])? *,?)+")
 				.attribute("release", "(?:release\\w*(?: date)?|produced-start) *=", "(\\d{4})").build()
 				.attribute("discontinued", "(?:discontinued|produced-end) *=", "(\\d{4})").build()
-				.attribute("wordSize", "data-width *=", "(\\d+)").hasMultiple().build()
-				.attribute("wordSize", "(?:platform|bits) *=", "(\\d+)-bit").hasMultiple().build()
-				.attribute("company", "manuf(?:1|acturer) *=", infoBoxEntityPattern).hasMultiple().build()
-				.attribute("company", "(?:developer|designfirm|designer) *=", infoBoxEntityPattern).hasMultiple().build()
-				.attribute("company", "owner *=", infoBoxEntityPattern).hasMultiple().build()
-				.attribute("company", "soldby *=", infoBoxEntityPattern).hasMultiple().build()
+				.attribute("wordSize", "data-width *=", "(\\d+)").enableMultipleMatches().build()
+				.attribute("wordSize", "(?:platform|bits) *=", "(\\d+)-bit").enableMultipleMatches().build()
+				.attribute("company", "manuf(?:1|acturer) *=", infoBoxEntityPattern).enableMultipleMatches().build()
+				.attribute("company", "(?:developer|designfirm|designer) *=", infoBoxEntityPattern).enableMultipleMatches().build()
+				.attribute("company", "owner *=", infoBoxEntityPattern).enableMultipleMatches().build()
+				.attribute("company", "soldby *=", infoBoxEntityPattern).enableMultipleMatches().build()
+				.attribute("clockSpeed", "(?:cpu|processor|frequency) *=", clockSpeed).enableConcatGroups().enableMultipleMatches().build()
+				.attribute("clockSpeed", null, "\\| *slowest *= *(" + decimalNumber + ") *\\| *slow-unit *= *" + clockSpeedUnit).enableConcatGroups().enableMultipleMatches().build()
 				.build();
 
 		// Find attributes in plain text directly, these are potentially accurate
@@ -222,6 +252,7 @@ public final class AttributeExtractor {
 				.anywhere()
 				.attribute("wordSize?", null, "\\[\\[(\\d+)-bit").build()
 				.attribute("wordSize?", null, "(\\w+)-bit (?:word|processor|microprocessor)").build()
+				.attribute("clockSpeed?", null, clockSpeed).enableConcatGroups().enableMultipleMatches().build()
 				.build();
 
 		// Find attributes in sentences, this is the last resort
@@ -234,7 +265,7 @@ public final class AttributeExtractor {
 				.then("release", null, "(?:in|on) " + genericDate).build()
 				.build()
 				// If there is "released in", collect the mentioned years.
-				.attribute(null, "released in", null).then("release?", null, "(?:in|on) " + genericDate).hasMultiple().build().build()
+				.attribute(null, "released in", null).then("release?", null, "(?:in|on) " + genericDate).enableMultipleMatches().build().build()
 				.build();
 	}
 }
