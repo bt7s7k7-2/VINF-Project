@@ -18,7 +18,7 @@ import bt7s7k7.vinf_project.common.Project;
 import bt7s7k7.vinf_project.indexing.Indexer;
 import bt7s7k7.vinf_project.input.Crawler;
 import bt7s7k7.vinf_project.search.SearchEngine;
-import bt7s7k7.vinf_project.spark.SparkTest;
+import bt7s7k7.vinf_project.spark.ExtractionPipeline;
 
 public class App {
 	public static void main(String[] args) {
@@ -91,11 +91,12 @@ public class App {
 					terminal.close();
 				}
 				case "spark" -> {
-					var sparkTest = new SparkTest(project.getDocumentDatabase(), args[1]);
-					sparkTest.createLuceneIndex();
+					var pipeline = new ExtractionPipeline(project);
+
+					pipeline.execute(args[1], pipeline::createLuceneIndex);
 				}
 				case "lucene" -> {
-					SparkTest.searchLuceneIndex();
+					new ExtractionPipeline(project).searchLuceneIndex();
 				}
 				default -> {
 					Logger.error("Invalid arguments");
