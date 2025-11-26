@@ -11,19 +11,33 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.DecimalFormat;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.DoublePoint;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.IntPoint;
+import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
-import org.apache.lucene.queryparser.classic.ParseException;
-import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
+import org.apache.lucene.queryparser.flexible.standard.StandardQueryParser;
+import org.apache.lucene.queryparser.flexible.standard.config.PointsConfig;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.spark.sql.Dataset;
@@ -241,6 +255,21 @@ public class ExtractionPipeline {
 		return output;
 	}
 
+	public static double findMostProbableValue(Stream<Double> input) {
+		// To find a most probable value from a set of values, get the one that occurs the most. If
+		// there is a tie, be pessimistic and pick the smallest one
+		return input
+				.collect(Collectors.groupingBy(Function.identity(), Collectors.counting()))
+				.entrySet().stream()
+				// First order by frequency
+				.max(Comparator.<Map.Entry<Double, Long>>comparingLong(Map.Entry::getValue)
+						// Then order from smallest to largest
+						.thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
+				.orElseGet(() -> {
+					throw new RuntimeException("Failed to find value");
+				}).getKey().intValue();
+	}
+
 	public void createLuceneIndex(String target) throws IOException {
 		var input = this.getAttributes(target);
 		var output = this.getOutputFolder().resolve("index");
@@ -266,6 +295,76 @@ public class ExtractionPipeline {
 						var text = row.getString(row.fieldIndex("value"));
 						document.add(new Field("text", text, TextField.TYPE_NOT_STORED));
 
+						// Parse out the attributes from string
+						var attributesString = row.getString(row.fieldIndex("attributes"));
+						var attributes = new HashMap<String, List<String>>();
+						for (var kvString : attributesString.split("\t")) {
+							if (kvString.isBlank()) continue;
+							var kv = kvString.split(":");
+							if (kv.length != 2) {
+								throw new RuntimeException("Failed to parse attribute kv");
+							}
+							var key = kv[0];
+							var value = kv[1];
+							attributes.computeIfAbsent(key, ___ -> new ArrayList<>()).add(value);
+						}
+
+						// Index companies, prioritise companies from infobox, else use the companies from text
+						for (var company : attributes.getOrDefault("company", attributes.getOrDefault("company?", Collections.emptyList()))) {
+							document.add(new Field("company", company, TextField.TYPE_STORED));
+						}
+
+						// Index release date
+						do {
+							// Prioritise values from infobox, else use the values from text
+							var values = attributes.getOrDefault("release", attributes.getOrDefault("release?", Collections.emptyList()));
+							if (values.isEmpty()) break;
+
+							var value = (int) findMostProbableValue(values.stream().map(Double::parseDouble));
+
+							document.add(new IntPoint("release", value));
+							// Because IntPoint does not store the value, store it here
+							document.add(new StoredField("release", value));
+						} while (false);
+
+						// Index word size
+						do {
+							// Prioritise values from infobox, else use the values from text
+							var values = attributes.getOrDefault("wordSize", attributes.getOrDefault("wordSize?", Collections.emptyList()));
+							if (values.isEmpty()) break;
+
+							var value = (int) findMostProbableValue(values.stream().map(Double::parseDouble));
+
+							document.add(new IntPoint("wordSize", value));
+							// Because IntPoint does not store the value, store it here
+							document.add(new StoredField("wordSize", value));
+						} while (false);
+
+						// Index clock speed
+						do {
+							// Prioritise values from infobox, else use the values from text
+							var values = attributes.getOrDefault("clockSpeed", attributes.getOrDefault("clockSpeed?", Collections.emptyList()));
+							if (values.isEmpty()) break;
+
+							var value = findMostProbableValue(values.stream().map(speed -> {
+								var segments = speed.split(" ");
+								var number = Double.parseDouble(segments[0]);
+								var unit = segments[1];
+
+								return switch (unit.toLowerCase()) {
+									case "hz" -> number;
+									case "khz" -> number * 1000;
+									case "mhz" -> number * 1000 * 1000;
+									case "ghz" -> number * 1000 * 1000 * 1000;
+									default -> throw new IllegalStateException("Invalid unit " + unit);
+								};
+							}));
+
+							document.add(new DoublePoint("clockSpeed", value));
+							// Because IntPoint does not store the value, store it here
+							document.add(new StoredField("clockSpeed", value));
+						} while (false);
+
 						writer.addDocument(document);
 					}
 				}
@@ -279,7 +378,12 @@ public class ExtractionPipeline {
 		try (var directory = FSDirectory.open(output)) {
 			try (DirectoryReader reader = DirectoryReader.open(directory)) {
 				var searcher = new IndexSearcher(reader);
-				var parser = new QueryParser("text", new StandardAnalyzer());
+				var queryParser = new StandardQueryParser(new StandardAnalyzer());
+
+				queryParser.setPointsConfigMap(Map.of(
+						"wordSize", new PointsConfig(DecimalFormat.getNumberInstance(), Integer.class),
+						"release", new PointsConfig(DecimalFormat.getNumberInstance(), Integer.class),
+						"clockSpeed", new PointsConfig(DecimalFormat.getNumberInstance(), Double.class)));
 
 				var terminal = TerminalBuilder.builder()
 						.system(true)
@@ -297,8 +401,8 @@ public class ExtractionPipeline {
 						var line = lineReader.readLine("> ").trim();
 						if (line.isEmpty()) continue;
 
-						var query = parser.parse(line);
-						var hits = searcher.search(query, 10).scoreDocs;
+						var query = queryParser.parse(line, "text");
+						var hits = searcher.search(query, 100).scoreDocs;
 						var storedFields = searcher.storedFields();
 
 						for (var hit : hits) {
@@ -312,7 +416,7 @@ public class ExtractionPipeline {
 						continue;
 					} catch (EndOfFileException __) {
 						break;
-					} catch (ParseException error) {
+					} catch (QueryNodeException error) {
 						Logger.error("Failed to parse query: " + error.getLocalizedMessage());
 					}
 				}

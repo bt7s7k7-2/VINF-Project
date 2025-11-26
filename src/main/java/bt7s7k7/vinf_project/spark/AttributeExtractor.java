@@ -226,9 +226,8 @@ public final class AttributeExtractor {
 		var genericDate = "(?:\\d{1,2} )?(?:[A-Za-z]+ )?(\\d{4})";
 
 		// The unit can be from Hz to GHz. This could exclude Hz, because this is likely to conflict
-		// with power input frequency, but that is unlikely to happen in infobox, so process that in
-		// post processing.
-		var clockSpeedUnit = "(?:\\[\\[)?(?:Hertz\\|)?([MGk]?Hz)";
+		// with power input frequency and there are no computers that measure speed in just hertz.
+		var clockSpeedUnit = "(?:\\[\\[)?(?:Hertz\\|)?([MGk]Hz)";
 		var decimalNumber = "\\d+(?:\\.\\d+)?";
 		var clockSpeed = "(" + decimalNumber + ") *(?:&nbsp; *)?" + clockSpeedUnit;
 
