@@ -40,6 +40,13 @@ dependencies {
 	implementation 'org.apache.spark:spark-sql_2.13:4.0.1'
 	// https://mvnrepository.com/artifact/org.apache.commons/commons-compress
 	implementation 'org.apache.commons:commons-compress:1.28.0'
+
+	// https://mvnrepository.com/artifact/org.apache.lucene/lucene-core
+	implementation 'org.apache.lucene:lucene-core:10.3.2'
+	// https://mvnrepository.com/artifact/org.apache.lucene/lucene-queryparser
+	implementation 'org.apache.lucene:lucene-queryparser:10.3.2'
+	// https://mvnrepository.com/artifact/org.apache.lucene/lucene-analysis-common
+	implementation 'org.apache.lucene:lucene-analysis-common:10.3.2'
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

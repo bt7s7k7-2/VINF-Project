@@ -92,7 +92,10 @@ public class App {
 				}
 				case "spark" -> {
 					var sparkTest = new SparkTest(project.getDocumentDatabase(), args[1]);
-					sparkTest.run();
+					sparkTest.createLuceneIndex();
+				}
+				case "lucene" -> {
+					SparkTest.searchLuceneIndex();
 				}
 				default -> {
 					Logger.error("Invalid arguments");
