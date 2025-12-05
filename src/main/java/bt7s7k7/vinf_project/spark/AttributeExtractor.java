@@ -102,6 +102,7 @@ public final class AttributeExtractor {
 
 		private boolean multipleMatches = false;
 		private boolean concatGroups = false;
+		private String explicitValue = null;
 
 		public Attribute(T owner, String name, Pattern predicate, Pattern value) {
 			super(owner);
@@ -109,8 +110,6 @@ public final class AttributeExtractor {
 			this.name = name;
 			this.predicate = predicate;
 			this.value = value;
-
-			if ((name == null) != (value == null)) throw new IllegalArgumentException("The name and value of an Attribute must both be null or not-null");
 		}
 
 		public Attribute(T owner, String name, String predicate, String value) {
@@ -131,6 +130,11 @@ public final class AttributeExtractor {
 
 		public Attribute<T> enableConcatGroups() {
 			this.concatGroups = true;
+			return this;
+		}
+
+		public Attribute<T> setExplicitValue(String value) {
+			this.explicitValue = value;
 			return this;
 		}
 
@@ -175,6 +179,10 @@ public final class AttributeExtractor {
 		public boolean match(String input, Consumer<String> append) {
 			// If we have a predicate, it must be in input
 			if (this.predicate != null && !this.predicate.matcher(input).find()) return false;
+
+			if (this.explicitValue != null) {
+				append.accept(this.name + ":" + this.explicitValue);
+			}
 
 			if (this.value == null) {
 				// If we don't have a value pattern, just execute the children then exit
@@ -244,6 +252,14 @@ public final class AttributeExtractor {
 				.attribute("company", "soldby *=", infoBoxEntityPattern).enableMultipleMatches().build()
 				.attribute("clockSpeed", "(?:cpu|processor|frequency) *=", clockSpeed).enableConcatGroups().enableMultipleMatches().build()
 				.attribute("clockSpeed", null, "\\| *slowest *= *(" + decimalNumber + ") *\\| *slow-unit *= *" + clockSpeedUnit).enableConcatGroups().enableMultipleMatches().build()
+				.build();
+
+		// Find attributes by category, these are definitely accurate
+		VALUE
+				.inPattern("\\[\\[Category:(.*?)[\\]|]")
+				.attribute("tech", "Vacuum tube computers", null).setExplicitValue("vacuum-tubes").build()
+				.attribute("tech", "Electro-mechanical computers", null).setExplicitValue("electro-mechanical").build()
+				.attribute("tech", "Serial computers", null).setExplicitValue("serial").build()
 				.build();
 
 		// Find attributes in plain text directly, these are potentially accurate

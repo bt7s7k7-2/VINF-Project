@@ -367,6 +367,26 @@ public class ExtractionPipeline {
 							document.add(new StoredField("clockSpeed", value));
 						} while (false);
 
+						// Index technology
+						{
+							var tech = attributes.get("tech");
+							if (tech == null) tech = Collections.emptyList();
+
+							if (tech.contains("serial")) {
+								document.add(new Field("architecture", "serial", TextField.TYPE_STORED));
+							} else {
+								document.add(new Field("architecture", "parallel", TextField.TYPE_STORED));
+							}
+
+							if (tech.contains("vacuum-tubes")) {
+								document.add(new Field("logic", "vacuum-tubes", TextField.TYPE_STORED));
+							} else if (tech.contains("electro-mechanical")) {
+								document.add(new Field("logic", "electro-mechanical", TextField.TYPE_STORED));
+							} else {
+								document.add(new Field("logic", "transistor", TextField.TYPE_STORED));
+							}
+						}
+
 						writer.addDocument(document);
 					}
 				}
