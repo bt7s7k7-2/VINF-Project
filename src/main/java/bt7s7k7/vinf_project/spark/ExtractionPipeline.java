@@ -9,6 +9,8 @@ import static org.apache.spark.sql.functions.regexp_extract_all;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.DecimalFormat;
@@ -65,7 +67,7 @@ public class ExtractionPipeline {
 	}
 
 	public static interface PipelineStage {
-		public void execute(String target) throws IOException;
+		public void execute(String target) throws Exception;
 	}
 
 	private static String removeExtension(String name) {
@@ -167,7 +169,7 @@ public class ExtractionPipeline {
 		return this.cachedSession;
 	}
 
-	public void execute(String target, PipelineStage stage) throws IOException {
+	public void execute(String target, PipelineStage stage) throws Exception {
 		var inputFolder = this.getInputFolder();
 
 		if (target.equals("1") || target.equals("*")) {
@@ -372,7 +374,7 @@ public class ExtractionPipeline {
 		}
 	}
 
-	public void searchLuceneIndex() throws IOException {
+	public void searchLuceneIndex() throws IOException, URISyntaxException {
 		var output = this.getOutputFolder().resolve("index");
 
 		try (var directory = FSDirectory.open(output)) {
@@ -407,7 +409,9 @@ public class ExtractionPipeline {
 
 						for (var hit : hits) {
 							var document = storedFields.document(hit.doc);
-							Logger.info("Found: " + document.get("title") + " \u001b[2m(Score: " + hit.score + ")\u001b[0m");
+							var title = document.get("title");
+							var url = URI.create("https://en.wikipedia.org/wiki/").resolve(new URI(null, null, title, null, null));
+							Logger.info("Found: " + title + " \u001b[2m(Score: " + hit.score + "; URL: " + url.toString() + ")\u001b[0m");
 						}
 
 						Logger.success("Found " + hits.length + " results");

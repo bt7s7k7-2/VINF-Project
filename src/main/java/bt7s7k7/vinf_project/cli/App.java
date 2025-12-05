@@ -2,10 +2,8 @@ package bt7s7k7.vinf_project.cli;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.file.Paths;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReaderBuilder;
@@ -103,7 +101,7 @@ public class App {
 					System.exit(1);
 				}
 			}
-		} catch (IOException | URISyntaxException | InterruptedException | ExecutionException e) {
+		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
 	}
