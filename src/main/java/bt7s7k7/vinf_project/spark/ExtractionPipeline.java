@@ -302,12 +302,32 @@ public class ExtractionPipeline {
 						var attributes = new HashMap<String, List<String>>();
 						for (var kvString : attributesString.split("\t")) {
 							if (kvString.isBlank()) continue;
-							var kv = kvString.split(":");
-							if (kv.length != 2) {
-								throw new RuntimeException("Failed to parse attribute kv");
+							var delimiter = kvString.indexOf(":");
+							if (delimiter == -1) {
+								Logger.warn("Skipping attribute " + kvString + ", in document " + title);
+								continue;
 							}
-							var key = kv[0];
-							var value = kv[1];
+
+							var key = kvString.substring(0, delimiter);
+							if (key.isBlank()) {
+								if (key.length() == 0) {
+									throw new RuntimeException("Failed to parse key from " + kvString + ", in document " + title);
+								} else {
+									Logger.warn("Key is blank for document " + title);
+									continue;
+								}
+							}
+
+							var value = kvString.substring(delimiter + 1, kvString.length());
+							if (value.isBlank()) {
+								if (value.length() == 0) {
+									throw new RuntimeException("Failed to parse value from " + kvString + ", in document " + title);
+								} else {
+									Logger.warn("Value is blank for document " + title);
+									continue;
+								}
+							}
+
 							attributes.computeIfAbsent(key, ___ -> new ArrayList<>()).add(value);
 						}
 
