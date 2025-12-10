@@ -48,7 +48,6 @@ import org.apache.lucene.store.FSDirectory;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.api.java.UDF1;
 import org.apache.spark.sql.types.DataTypes;
@@ -258,9 +257,9 @@ public class ExtractionPipeline {
 		return output;
 	}
 
-	private static final Pattern SITE_CATEGORIES_PATTERN = Pattern.compile("\\[\\[Categories\\]\\]: ((?:\\[\\[.*?\\]\\])+)");
+	private static final Pattern SITE_CATEGORIES_PATTERN = Pattern.compile("\\[\\[Categor(?:ies|y)\\]\\]: ((?:\\[\\[.*?\\]\\])+)");
 	private static final Pattern SITE_CATEGORY_PATTERN = Pattern.compile("\\[\\[(.*?)\\]\\]");
-	private static final Pattern SITE_WHITELIST = Pattern.compile("system|processor|computer|mainframe", Pattern.CASE_INSENSITIVE);
+	private static final Pattern SITE_WHITELIST = Pattern.compile("system|processor|computer|mainframe|unibus", Pattern.CASE_INSENSITIVE);
 	private static final Pattern SITE_BLACKLIST = Pattern.compile("operating system|file system|software|manufacturer|documentation|families|interface| basics", Pattern.CASE_INSENSITIVE);
 	private static final Pattern TITLE_ILLEGAL = Pattern.compile("\\(.*?\\)", Pattern.CASE_INSENSITIVE);
 
@@ -314,7 +313,7 @@ public class ExtractionPipeline {
 				.withColumn("attributes", callUDF("findAttributes", col("value")))
 				.orderBy(col("title"));
 
-		result.write().mode(SaveMode.Overwrite).parquet(output.toString());
+		result.write().parquet(output.toString());
 
 		start.close();
 
@@ -366,9 +365,10 @@ public class ExtractionPipeline {
 
 	private static double parseNumber(String number) {
 		try {
-			return switch (number) {
+			return switch (number.toLowerCase()) {
 				case "sixteen" -> 16;
 				case "single" -> 1;
+				case "four" -> 4;
 				default -> Double.parseDouble(number);
 			};
 		} catch (NumberFormatException error) {
@@ -402,6 +402,7 @@ public class ExtractionPipeline {
 						if (externTitle != null) document.add(new StoredField("externTitle", externTitle));
 
 						var text = row.getString(row.fieldIndex("value"));
+						text += ("\n" + title).repeat(10);
 						document.add(new Field("text", text, TextField.TYPE_NOT_STORED));
 
 						// Parse out the attributes from string
