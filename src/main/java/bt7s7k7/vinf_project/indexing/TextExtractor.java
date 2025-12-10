@@ -7,7 +7,7 @@ public final class TextExtractor {
 	private TextExtractor() {}
 
 	// Matches all HTML tags with their attributes and including closing and self-closing tags
-	private static final Pattern HTML_TAG_PATTERN = Pattern.compile("<\\/?([\\w-]+)\\s*(?:\\s*[\\w-](?:=(?:\"[^\"]*\")|[^\\s\"]+)?\\s*)*\\/?>");
+	private static final Pattern HTML_TAG_PATTERN = Pattern.compile("<[\\/!]?([\\w-]+)\\s*(?:\\s*[\\w-](?:=(?:\"[^\"]*\")|[^\\s\"]+)?\\s*)*\\/?>");
 	private static final Pattern HTML_ESCAPE_SEQUENCE = Pattern.compile("&[a-z]+;");
 
 	public static String extractText(String html) {
@@ -27,10 +27,16 @@ public final class TextExtractor {
 
 			// Detect start and end of script tags, so they can be ignored
 			var tagName = matcher.group(1);
-			if (tagName.equals("script")) {
-				var match = matcher.group();
-				var isClosing = match.startsWith("</");
-				isInScript = isClosing ? false : true;
+			var match = matcher.group();
+			var isClosing = match.startsWith("</");
+
+			switch (tagName) {
+				case "script" -> {
+					isInScript = isClosing ? false : true;
+				}
+				case "a" -> {
+					result.append(isClosing ? "]]" : "[[");
+				}
 			}
 		}
 

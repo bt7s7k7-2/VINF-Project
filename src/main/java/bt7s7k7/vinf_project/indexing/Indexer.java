@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 
 import bt7s7k7.vinf_project.common.Logger;
 import bt7s7k7.vinf_project.common.Project;
+import bt7s7k7.vinf_project.input.InputFile;
 import bt7s7k7.vinf_project.input.InputFileManager;
 
 public class Indexer {
@@ -27,12 +28,6 @@ public class Indexer {
 
 		for (var file : this.inputFiles.getFiles()) {
 			index++;
-			// Skip category files
-			if (file.name.startsWith("Category:")
-					|| file.name.startsWith("Category_talk:")
-					|| file.name.startsWith("Special:")) {
-				continue;
-			}
 
 			// Skip already indexed files
 			if (this.documentDatabase.hasDocument(file.name)) {
@@ -40,13 +35,10 @@ public class Indexer {
 				continue;
 			}
 
-			var documentId = this.documentDatabase.addDocument(file.name);
+			var content = getDocumentContentIfValid(file, this.inputFiles);
+			if (content == null) continue;
 
-			// Skip redirected pages, some redirection is done by JavaScript so we detect that here
-			var content = this.inputFiles.getContent(file);
-			if (content.contains("wgInternalRedirectTargetUrl")) {
-				continue;
-			}
+			var documentId = this.documentDatabase.addDocument(file.name);
 
 			// Get tokens in document
 			var text = TextExtractor.extractText(content);
@@ -68,5 +60,22 @@ public class Indexer {
 
 		this.documentDatabase.save();
 		this.index.save();
+	}
+
+	public static String getDocumentContentIfValid(InputFile file, InputFileManager inputFiles) throws IOException {
+		// Skip category files
+		if (file.name.startsWith("Category:")
+				|| file.name.startsWith("Category_talk:")
+				|| file.name.startsWith("Special:")) {
+			return null;
+		}
+
+		// Skip redirected pages, some redirection is done by JavaScript so we detect that here
+		var content = inputFiles.getContent(file);
+		if (content.contains("wgInternalRedirectTargetUrl")) {
+			return null;
+		}
+
+		return content;
 	}
 }

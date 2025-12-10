@@ -2,7 +2,9 @@ package bt7s7k7.vinf_project.spark;
 
 import static org.apache.spark.sql.functions.array_join;
 import static org.apache.spark.sql.functions.callUDF;
+import static org.apache.spark.sql.functions.coalesce;
 import static org.apache.spark.sql.functions.col;
+import static org.apache.spark.sql.functions.concat_ws;
 import static org.apache.spark.sql.functions.lit;
 import static org.apache.spark.sql.functions.lower;
 import static org.apache.spark.sql.functions.regexp_extract_all;
@@ -23,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -44,6 +47,8 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.api.java.UDF1;
 import org.apache.spark.sql.types.DataTypes;
@@ -58,6 +63,8 @@ import org.jline.terminal.TerminalBuilder;
 
 import bt7s7k7.vinf_project.common.Logger;
 import bt7s7k7.vinf_project.common.Project;
+import bt7s7k7.vinf_project.indexing.Indexer;
+import bt7s7k7.vinf_project.indexing.TextExtractor;
 
 public class ExtractionPipeline {
 	public final Project project;
@@ -210,12 +217,6 @@ public class ExtractionPipeline {
 		}
 	}
 
-	private static final StructType ATTRIBUTES_SCHEMA = new StructType(new StructField[] {
-			new StructField("title", DataTypes.StringType, false, Metadata.empty()),
-			new StructField("attributes", DataTypes.StringType, false, Metadata.empty()),
-			new StructField("value", DataTypes.StringType, false, Metadata.empty()),
-	});
-
 	public Path getAttributes(String target) throws IOException {
 		var input = this.getParquetFile(target);
 		var output = this.getIntermediateFolder().resolve("attr_" + target + ".parquet");
@@ -257,6 +258,99 @@ public class ExtractionPipeline {
 		return output;
 	}
 
+	private static final Pattern SITE_CATEGORIES_PATTERN = Pattern.compile("\\[\\[Categories\\]\\]: ((?:\\[\\[.*?\\]\\])+)");
+	private static final Pattern SITE_CATEGORY_PATTERN = Pattern.compile("\\[\\[(.*?)\\]\\]");
+	private static final Pattern SITE_WHITELIST = Pattern.compile("system|processor|computer|mainframe", Pattern.CASE_INSENSITIVE);
+	private static final Pattern SITE_BLACKLIST = Pattern.compile("operating system|file system|software|manufacturer|documentation|families|interface| basics", Pattern.CASE_INSENSITIVE);
+	private static final Pattern TITLE_ILLEGAL = Pattern.compile("\\(.*?\\)", Pattern.CASE_INSENSITIVE);
+
+	public Path getSiteAttributes() throws IOException {
+		var output = this.getIntermediateFolder().resolve("attr_site.parquet");
+
+		if (Files.exists(output)) {
+			Logger.warn("Site attributes file already exists");
+			return output;
+		}
+
+		var start = new Stopwatch("Reading file contents");
+		var inputFiles = this.project.getInputFileManager();
+		var rows = new ArrayList<Row>();
+
+		for (var file : inputFiles.getFiles()) {
+			var content = Indexer.getDocumentContentIfValid(file, inputFiles);
+			if (content == null) continue;
+
+			var text = TextExtractor.extractText(content);
+			var categoriesMatcher = SITE_CATEGORIES_PATTERN.matcher(text);
+			if (!categoriesMatcher.find()) continue;
+			var categoryMatcher = SITE_CATEGORY_PATTERN.matcher(categoriesMatcher.group(1));
+			var categories = new StringBuilder();
+
+			while (categoryMatcher.find()) {
+				if (!categories.isEmpty()) categories.append("|");
+				categories.append(categoryMatcher.group(1));
+			}
+
+			var categoriesString = categories.toString();
+			var relevant = SITE_WHITELIST.matcher(categoriesString).find() && !SITE_BLACKLIST.matcher(categoriesString).find();
+			if (!relevant) continue;
+
+			var title = file.name.replace("_", " ");
+			rows.add(RowFactory.create(title, text));
+		}
+
+		start.close();
+
+		var spark = this.getSpark();
+
+		start = new Stopwatch("Creating data frame");
+
+		var df = spark.createDataFrame(rows, new StructType(new StructField[] {
+				new StructField("title", DataTypes.StringType, false, Metadata.empty()),
+				new StructField("value", DataTypes.StringType, false, Metadata.empty()),
+		}));
+
+		var result = df
+				.withColumn("attributes", callUDF("findAttributes", col("value")))
+				.orderBy(col("title"));
+
+		result.write().mode(SaveMode.Overwrite).parquet(output.toString());
+
+		start.close();
+
+		return output;
+	}
+
+	public Dataset<Row> tryJoin(String target) throws IOException {
+		var externInput = this.getAttributes(target);
+		var siteInput = this.getSiteAttributes();
+		var spark = this.getSpark();
+
+		try (var __ = new Stopwatch("Joining attributes...")) {
+			var dfExtern = spark.read().parquet(externInput.toString());
+			var dfSite = spark.read().parquet(siteInput.toString());
+
+			spark.udf().register("normalizeTitle", (UDF1<String, String>) title -> {
+				return TextExtractor.extractTokens(TITLE_ILLEGAL.matcher(title).replaceAll("")).collect(Collectors.joining(" "));
+			}, DataTypes.StringType);
+
+			return dfExtern
+					.withColumn("nTitle", callUDF("normalizeTitle", col("title")))
+					.alias("extern")
+					.join(
+							dfSite
+									.withColumn("nTitle", callUDF("normalizeTitle", col("title")))
+									.alias("site"),
+							col("extern.nTitle").equalTo(col("site.nTitle")), "outer")
+					.select(
+							coalesce(col("extern.title"), col("site.title")).alias("title"),
+							col("extern.title").alias("externTitle"),
+							col("site.title").alias("siteTitle"),
+							concat_ws("\t", col("site.attributes"), col("extern.attributes")).alias("attributes"),
+							concat_ws(" ", col("site.value"), col("extern.value")).alias("value"));
+		}
+	}
+
 	public static double findMostProbableValue(Stream<Double> input) {
 		// To find a most probable value from a set of values, get the one that occurs the most. If
 		// there is a tie, be pessimistic and pick the smallest one
@@ -272,10 +366,22 @@ public class ExtractionPipeline {
 				}).getKey().intValue();
 	}
 
+	private static double parseNumber(String number) {
+		try {
+			return switch (number) {
+				case "sixteen" -> 16;
+				case "single" -> 1;
+				default -> Double.parseDouble(number);
+			};
+		} catch (NumberFormatException error) {
+			Logger.error("Failed to parse number: " + number);
+			return Double.POSITIVE_INFINITY;
+		}
+	}
+
 	public void createLuceneIndex(String target) throws IOException {
-		var input = this.getAttributes(target);
 		var output = this.getOutputFolder().resolve("index");
-		var spark = this.getSpark();
+		var df = this.tryJoin(target);
 
 		try (var __ = new Stopwatch("Creating index")) {
 			try (var directory = FSDirectory.open(output)) {
@@ -284,15 +390,18 @@ public class ExtractionPipeline {
 				config.setOpenMode(OpenMode.CREATE);
 
 				try (var writer = new IndexWriter(directory, config)) {
-					var df = spark.read()
-							.schema(ATTRIBUTES_SCHEMA)
-							.parquet(input.toString());
 
 					for (var row : df.collectAsList()) {
 						var document = new Document();
 
 						var title = row.getString(row.fieldIndex("title"));
 						document.add(new Field("title", title, TextField.TYPE_STORED));
+
+						var siteTitle = row.getString(row.fieldIndex("siteTitle"));
+						if (siteTitle != null) document.add(new StoredField("siteTitle", siteTitle));
+
+						var externTitle = row.getString(row.fieldIndex("externTitle"));
+						if (externTitle != null) document.add(new StoredField("externTitle", externTitle));
 
 						var text = row.getString(row.fieldIndex("value"));
 						document.add(new Field("text", text, TextField.TYPE_NOT_STORED));
@@ -342,7 +451,7 @@ public class ExtractionPipeline {
 							var values = attributes.getOrDefault("release", attributes.getOrDefault("release?", Collections.emptyList()));
 							if (values.isEmpty()) break;
 
-							var value = (int) findMostProbableValue(values.stream().map(Double::parseDouble));
+							var value = (int) findMostProbableValue(values.stream().map(ExtractionPipeline::parseNumber));
 
 							document.add(new IntPoint("release", value));
 							// Because IntPoint does not store the value, store it here
@@ -355,7 +464,7 @@ public class ExtractionPipeline {
 							var values = attributes.getOrDefault("wordSize", attributes.getOrDefault("wordSize?", Collections.emptyList()));
 							if (values.isEmpty()) break;
 
-							var value = (int) findMostProbableValue(values.stream().map(Double::parseDouble));
+							var value = (int) findMostProbableValue(values.stream().map(ExtractionPipeline::parseNumber));
 
 							document.add(new IntPoint("wordSize", value));
 							// Because IntPoint does not store the value, store it here
@@ -370,7 +479,7 @@ public class ExtractionPipeline {
 
 							var value = findMostProbableValue(values.stream().map(speed -> {
 								var segments = speed.split(" ");
-								var number = Double.parseDouble(segments[0]);
+								var number = parseNumber(segments[0]);
 								var unit = segments[1];
 
 								return switch (unit.toLowerCase()) {
