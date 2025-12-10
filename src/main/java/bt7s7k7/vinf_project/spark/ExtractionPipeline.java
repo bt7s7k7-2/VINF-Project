@@ -330,9 +330,7 @@ public class ExtractionPipeline {
 			var dfExtern = spark.read().parquet(externInput.toString());
 			var dfSite = spark.read().parquet(siteInput.toString());
 
-			spark.udf().register("normalizeTitle", (UDF1<String, String>) title -> {
-				return TextExtractor.extractTokens(TITLE_ILLEGAL.matcher(title).replaceAll("")).collect(Collectors.joining(" "));
-			}, DataTypes.StringType);
+			spark.udf().register("normalizeTitle", (UDF1<String, String>) title -> TextExtractor.extractTokens(TITLE_ILLEGAL.matcher(title).replaceAll("")).collect(Collectors.joining(" ")), DataTypes.StringType);
 
 			return dfExtern
 					.withColumn("nTitle", callUDF("normalizeTitle", col("title")))
@@ -523,6 +521,20 @@ public class ExtractionPipeline {
 		}
 	}
 
+	private static final void addInfo(StringBuilder builder, String info, String value) {
+		if (!builder.isEmpty()) builder.append("; ");
+		builder.append(info);
+		builder.append(": ");
+		builder.append(value);
+	}
+
+	private static final void addUrlInfo(StringBuilder builder, Document document, String key, String base, String label) throws URISyntaxException {
+		var value = document.get(key);
+		if (value == null) return;
+		var url = URI.create(base).resolve(new URI(null, null, value, null, null));
+		addInfo(builder, label, url.toString());
+	}
+
 	public void searchLuceneIndex() throws IOException, URISyntaxException {
 		var output = this.getOutputFolder().resolve("index");
 
@@ -559,8 +571,11 @@ public class ExtractionPipeline {
 						for (var hit : hits) {
 							var document = storedFields.document(hit.doc);
 							var title = document.get("title");
-							var url = URI.create("https://en.wikipedia.org/wiki/").resolve(new URI(null, null, title, null, null));
-							Logger.info("Found: " + title + " \u001b[2m(Score: " + hit.score + "; URL: " + url.toString() + ")\u001b[0m");
+							var infoBuilder = new StringBuilder();
+							addInfo(infoBuilder, "Score", "" + hit.score);
+							addUrlInfo(infoBuilder, document, "externTitle", "https://en.wikipedia.org/wiki/", "Wikipedia");
+							addUrlInfo(infoBuilder, document, "siteTitle", "https://gunkies.org/wiki/", "Site");
+							Logger.info("Found: " + title + " \u001b[2m(" + infoBuilder.toString() + ")\u001b[0m");
 						}
 
 						Logger.success("Found " + hits.length + " results");
