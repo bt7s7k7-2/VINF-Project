@@ -194,7 +194,6 @@ public class ExtractionPipeline {
 	}
 
 	public Path getParquetFile(String target) throws IOException {
-		var input = this.getInputFolder().resolve(target + ".bz2");
 		var output = this.getIntermediateFolder().resolve(target + ".parquet");
 		var spark = this.getSpark();
 
@@ -202,6 +201,8 @@ public class ExtractionPipeline {
 			Logger.warn("Parquet file already exists");
 			return output;
 		}
+
+		var input = this.getInputFolder().resolve(target + ".bz2");
 
 		try (var __ = new Stopwatch("Converting XML file")) {
 			var df = spark.read()
@@ -217,7 +218,6 @@ public class ExtractionPipeline {
 	}
 
 	public Path getAttributes(String target) throws IOException {
-		var input = this.getParquetFile(target);
 		var output = this.getIntermediateFolder().resolve("attr_" + target + ".parquet");
 		var spark = this.getSpark();
 
@@ -225,6 +225,8 @@ public class ExtractionPipeline {
 			Logger.warn("Attributes file already exists");
 			return output;
 		}
+
+		var input = this.getParquetFile(target);
 
 		Dataset<Row> result;
 
