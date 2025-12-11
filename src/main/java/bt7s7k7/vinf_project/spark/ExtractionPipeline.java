@@ -402,7 +402,6 @@ public class ExtractionPipeline {
 						if (externTitle != null) document.add(new StoredField("externTitle", externTitle));
 
 						var text = row.getString(row.fieldIndex("value"));
-						text += ("\n" + title).repeat(10);
 						document.add(new Field("text", text, TextField.TYPE_NOT_STORED));
 
 						// Parse out the attributes from string
@@ -549,6 +548,17 @@ public class ExtractionPipeline {
 						"release", new PointsConfig(DecimalFormat.getNumberInstance(), Integer.class),
 						"clockSpeed", new PointsConfig(DecimalFormat.getNumberInstance(), Double.class)));
 
+				queryParser.setMultiFields(new CharSequence[] {
+						"title", "text", "company", "architecture", "logic"
+				});
+
+				queryParser.setFieldsBoost(Map.of(
+						"text", 1.0f,
+						"title", 4.0f,
+						"company", 5.0f,
+						"architecture", 5.0f,
+						"logic", 5.0f));
+
 				var terminal = TerminalBuilder.builder()
 						.system(true)
 						.build();
@@ -565,7 +575,7 @@ public class ExtractionPipeline {
 						var line = lineReader.readLine("> ").trim();
 						if (line.isEmpty()) continue;
 
-						var query = queryParser.parse(line, "text");
+						var query = queryParser.parse(line, null);
 						var hits = searcher.search(query, 100).scoreDocs;
 						var storedFields = searcher.storedFields();
 
